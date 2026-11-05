@@ -179,7 +179,14 @@ function visitMap(sessions,opt){
   var w=Math.max(x1-x0,170),h=Math.max(y1-y0,w/aspect);w=Math.max(w,h*aspect);h=w/aspect;
   var cx=(x0+x1)/2,cy=(y0+y1)/2;x0=Math.max(0,Math.min(W.w-w,cx-w/2));y0=Math.max(-20,Math.min(W.h-h+20,cy-h/2));if(w>W.w){x0=(W.w-w)/2}
   var k=w/px;
-  var dots=pts.sort(function(a,b){return b.n-a.n}).map(function(p){var r=(4+Math.sqrt(p.n)*2.2)*k,c=now-p.last<86400000?'var(--pink)':'var(--teal)';
+  // merge dots that would sit within ~14px of each other into one bigger dot (weighted centre)
+  var cl=[];pts.sort(function(a,b){return b.n-a.n}).forEach(function(p){
+    var hit=null;for(var i=0;i<cl.length;i++){var c=cl[i];if(Math.hypot(c.x-p.x,c.y-p.y)/k<14){hit=c;break}}
+    if(!hit){cl.push({x:p.x,y:p.y,n:p.n,last:p.last,places:[p.place],who:Object.assign({},p.who),sites:Object.assign({},p.sites)});return}
+    hit.x=(hit.x*hit.n+p.x*p.n)/(hit.n+p.n);hit.y=(hit.y*hit.n+p.y*p.n)/(hit.n+p.n);hit.n+=p.n;hit.last=Math.max(hit.last,p.last);
+    if(hit.places.indexOf(p.place)<0)hit.places.push(p.place);Object.assign(hit.who,p.who);Object.assign(hit.sites,p.sites)});
+  cl.forEach(function(c){c.place=c.places.slice(0,3).join(' / ')+(c.places.length>3?' +'+(c.places.length-3):'')});
+  var dots=cl.map(function(p){var r=(4+Math.sqrt(p.n)*2.2)*k,c=now-p.last<86400000?'var(--pink)':'var(--teal)';
     var tip=p.place+' · '+p.n+' visit'+(p.n===1?'':'s')+(Object.keys(p.who).length?' · '+Object.keys(p.who).slice(0,4).join(', '):'')+(opt.sites?' · '+Object.keys(p.sites).slice(0,3).join(', '):'')+' · last '+ago(p.last);
     return '<g><title>'+esc(tip)+'</title><circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+(r*2.2).toFixed(2)+'" fill="'+c+'" opacity=".16"/><circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+r.toFixed(2)+'" fill="'+c+'" stroke="#fff" stroke-width="'+(1.5*k).toFixed(2)+'"/></g>'}).join('');
   var cap=pts.length?'<span><i style="background:var(--pink)"></i>last 24h</span><span><i style="background:var(--teal)"></i>earlier</span><span>Approximate · network location</span>'+(noLoc?'<span>'+noLoc+' older visit'+(noLoc===1?'':'s')+' without location</span>':''):'<span>'+(sessions.length?'No locations yet: visits from now on get a dot':'No visits yet')+'</span>';
@@ -286,7 +293,7 @@ function activity(b){
   var list=S.data.sessions.filter(function(s){return s.unlocked||s.gate});
   var vis=list; // every visit, including brief ones (no interaction)
   b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="aq" placeholder="Filter by site or recipient" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+creatorSelect('acr')+
-  '</div><div id="amap" style="padding:0 14px"></div><div class="feed" id="feed"></div></div>';
+  '</div><div id="amap" style="padding:16px 14px 0"></div><div class="feed" id="feed"></div></div>';
   function draw(){var q=S.q.toLowerCase();var all=vis.filter(function(s){return (!q||s.host.indexOf(q)>-1||(s.r||'').toLowerCase().indexOf(q)>-1)&&(!S.creator||creatorOf(s.host)===S.creator)}),f=all.slice(0,200);
     $('amap').innerHTML=visitMap(all,{aspect:3.6,px:1100,sites:1,title:'Visitors · last '+S.days+' days'});
     $('feed').innerHTML=f.length?f.map(function(s){return sessionCard(s,true)}).join(''):'<div class="empty">'+(S.data.sessions.length?'No matching activity.':'No activity yet. Once the tracker is on your sites, opens will show up here within seconds.')+'</div>'}
