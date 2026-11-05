@@ -48,7 +48,7 @@ export const isSiteId = (id: string) => /^[0-9a-f-]{36}$/i.test(id);
 export const MANAGE_MAX_AGE_MS = 5 * 60_000;
 
 /** `ids` are project IDs; `refs` (track only) may be project names, URLs or IDs. */
-export type ManageRequest = { op: "status" | "track" | "untrack" | "forget"; ids?: string[]; refs?: string[]; ts: number };
+export type ManageRequest = { op: "status" | "candidates" | "track" | "untrack" | "forget"; ids?: string[]; refs?: string[]; ts: number };
 
 /** Body + signature header for a dashboard -> collector admin call, signed with HOOK_SECRET. */
 export function signManageRequest(req: Omit<ManageRequest, "ts">, secret: string, now = Date.now()) {
@@ -62,7 +62,7 @@ export function readManageRequest(body: string, signature: string, secret: strin
   try {
     const r = JSON.parse(body) as ManageRequest;
     if (typeof r.ts !== "number" || Math.abs(now - r.ts) > MANAGE_MAX_AGE_MS) return null;
-    if (!["status", "track", "untrack", "forget"].includes(r.op)) return null;
+    if (!["status", "candidates", "track", "untrack", "forget"].includes(r.op)) return null;
     return r;
   } catch {
     return null;
