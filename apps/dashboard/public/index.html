@@ -103,8 +103,8 @@ input:focus,select.in:focus{outline:2px solid var(--teal);outline-offset:-1px}
 .btn.danger{background:transparent;color:var(--pink);border:1px solid rgba(244,63,133,.4)}
 .btn:disabled{opacity:.5;cursor:default}
 .drawer-bg{position:fixed;inset:0;background:rgba(4,33,31,.45);display:none;z-index:20}
-.drawer{position:fixed;top:0;right:0;bottom:0;width:min(640px,100%);background:var(--bg);z-index:21;transform:translateX(100%);transition:transform .2s ease;overflow-y:auto;box-shadow:-10px 0 40px rgba(0,0,0,.2)}
-.drawer.on{transform:none}.drawer-bg.on{display:block}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(640px,100%);background:var(--bg);z-index:21;transform:translateX(100%);transition:transform .2s ease;overflow-y:auto}
+.drawer.on{transform:none;box-shadow:-10px 0 40px rgba(0,0,0,.2)}.drawer-bg.on{display:block}
 .drawer .hd{position:sticky;top:0;background:var(--dark);color:#E7F2F0;padding:16px;display:flex;gap:10px;align-items:center}
 .drawer .hd h3{margin:0;font-size:16px;flex:1;word-break:break-all}
 .drawer .bd{padding:16px}
