@@ -86,6 +86,11 @@ describe("session folding and alerts", () => {
   });
 });
 
+test("visit locations are rounded to about 10 km, and optional", () => {
+  expect(newSession(ev("view"), "", { lat: 51.50722, lon: -0.12751 }, 0)).toMatchObject({ lat: 51.5, lon: -0.1 });
+  expect(newSession(ev("view"), "", {}, 0)).toMatchObject({ lat: null, lon: null });
+});
+
 test("parseUA", () => {
   expect(parseUA("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit Version/17.0 Mobile/15E148 Safari/604.1")).toEqual({
     device: "Mobile",

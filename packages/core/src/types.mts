@@ -33,6 +33,9 @@ export type Session = {
   country: string;
   cc: string;
   tz: string;
+  /** Approximate location from Netlify's edge geolocation, rounded to 1 decimal (about 10 km). */
+  lat?: number | null;
+  lon?: number | null;
   visitNo: number;
   visitorCount: number;
   newVisitor: boolean;

@@ -42,7 +42,14 @@ export default async (req: Request, context: Context) => {
   if (!site) return done(); // not a tracked project: drop silently
   ev.h = site.host; // custom domains and aliases map to one canonical host
 
-  const geo = { city: context.geo?.city, country: context.geo?.country?.name, cc: context.geo?.country?.code, tz: context.geo?.timezone };
+  const geo = {
+    city: context.geo?.city,
+    country: context.geo?.country?.name,
+    cc: context.geo?.country?.code,
+    tz: context.geo?.timezone,
+    lat: context.geo?.latitude,
+    lon: context.geo?.longitude,
+  };
   try {
     const { session, pending } = await recordBeacon(pool as unknown as Pool, ev, ua, geo, Date.now());
     if (pending.length) context.waitUntil(sendAlerts(session, pending).catch((e) => console.error("alert failed", e)));
