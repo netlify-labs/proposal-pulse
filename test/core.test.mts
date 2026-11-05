@@ -8,6 +8,7 @@ import {
   readManageRequest,
   openAlert,
   hotAlert,
+  composeAlert,
   readOrgHook,
   signManageRequest,
   signNetlifyWebhook,
@@ -139,4 +140,15 @@ describe("🔥 alert and Slack format", () => {
       ":eyes: *deal.example.com* · opened (first visit)\nLondon, GB → https://dash.example.com/#site=deal.example.com",
     );
   });
+});
+
+test("alerts earned together become one message led by the strongest", () => {
+  const base = { ...newSession(ev("view"), "", { city: "Atlanta", cc: "US" }, 0), engagedMs: 3000, clicks: [{ t: 0, label: "a" }] };
+  expect(composeAlert({ ...base, newVisitor: false, visitNo: 2 }, ["open", "hot"], "https://dash.test", { createdByName: "Ricky" })).toBe(
+    ":fire: *deal.example.com* · by Ricky · read to the end and clicked · came back (visit #2)\nAtlanta, US · 3s · 1 click → https://dash.test/#site=deal.example.com",
+  );
+  // a plain first-visit open adds nothing next to 🔥
+  expect(composeAlert({ ...base, newVisitor: true, visitorCount: 1 }, ["open", "hot"], "https://dash.test")).toBe(
+    ":fire: *deal.example.com* · read to the end and clicked\nAtlanta, US · 3s · 1 click → https://dash.test/#site=deal.example.com",
+  );
 });

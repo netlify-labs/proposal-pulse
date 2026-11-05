@@ -1,11 +1,9 @@
 import type { Config, Context } from "@netlify/functions";
 import {
   BOT_UA,
-  deepAlert,
-  hotAlert,
+  composeAlert,
   env,
   isValidEvent,
-  openAlert,
   postSlack,
   trackedSiteForHost,
   type AlertSite,
@@ -64,12 +62,10 @@ export default async (req: Request, context: Context) => {
 
 async function sendAlerts(s: Session, types: AlertType[], site: AlertSite) {
   const dashboard = env("DASHBOARD_URL");
-  for (const type of types) {
-    if (!(await claimAlert(db, s.sid, type))) continue;
-    const text =
-      type === "open" ? openAlert(s, dashboard, site) : type === "hot" ? hotAlert(s, dashboard, site) : deepAlert(s, dashboard, site);
-    await postSlack(text);
-  }
+  // claim each alert once per visit, then post one combined message for everything claimed together
+  const claimed: AlertType[] = [];
+  for (const type of types) if (await claimAlert(db, s.sid, type)) claimed.push(type);
+  if (claimed.length) await postSlack(composeAlert(s, claimed, dashboard, site));
 }
 
 export const config: Config = {

@@ -1,5 +1,5 @@
 import { env, stripSlash } from "./env.mts";
-import type { Session } from "./types.mts";
+import type { AlertType, Session } from "./types.mts";
 
 /**
  * Optional Slack alerts. Messages are written in Slack mrkdwn with <url|label> links.
@@ -56,21 +56,36 @@ function alertText(s: Session, emoji: string, what: string, details: string[], d
   return `${emoji} *${siteLabel(s.host)}*${by} · ${what}\n${line2} → ${url}`;
 }
 
-export function openAlert(s: Session, dashboardUrl: string, site?: AlertSite) {
+type Part = { emoji: string; what: string; details: string[]; plainOpen?: boolean };
+
+function part(s: Session, type: AlertType): Part {
+  if (type === "hot") {
+    const n = s.clicks.length;
+    return { emoji: ":fire:", what: "read to the end and clicked", details: [fmtDur(s.engagedMs), `${n} click${n === 1 ? "" : "s"}`] };
+  }
+  if (type === "deep") return { emoji: ":book:", what: `deep read (${fmtDur(s.engagedMs)})`, details: [`${s.maxScroll}% scrolled`] };
   if (s.newVisitor && s.visitorCount > 1)
-    return alertText(s, ":busts_in_silhouette:", `new person opened it (${s.visitorCount} people so far, possible forward)`, [], dashboardUrl, site);
-  if (!s.newVisitor && s.visitNo > 1) return alertText(s, ":repeat:", `came back (visit #${s.visitNo})`, [], dashboardUrl, site);
-  return alertText(s, ":eyes:", "opened (first visit)", s.ref ? [`via ${s.ref}`] : [], dashboardUrl, site);
+    return { emoji: ":busts_in_silhouette:", what: `new person opened it (${s.visitorCount} people so far, possible forward)`, details: [] };
+  if (!s.newVisitor && s.visitNo > 1) return { emoji: ":repeat:", what: `came back (visit #${s.visitNo})`, details: [] };
+  return { emoji: ":eyes:", what: "opened (first visit)", details: s.ref ? [`via ${s.ref}`] : [], plainOpen: true };
 }
 
-export function hotAlert(s: Session, dashboardUrl: string, site?: AlertSite) {
-  const n = s.clicks.length;
-  return alertText(s, ":fire:", "read to the end and clicked", [fmtDur(s.engagedMs), `${n} click${n === 1 ? "" : "s"}`], dashboardUrl, site);
+/**
+ * One message for every alert a visit earned at the same moment, led by the strongest
+ * (🔥, then deep read, then open). A plain first-visit "opened" is dropped when combined,
+ * since the stronger alert implies it; "came back" and "new person" are kept.
+ */
+export function composeAlert(s: Session, types: AlertType[], dashboardUrl: string, site?: AlertSite) {
+  const order: AlertType[] = ["hot", "deep", "open"];
+  let parts = order.filter((t) => types.includes(t)).map((t) => part(s, t));
+  if (parts.length > 1) parts = parts.filter((p) => !p.plainOpen);
+  const details = [...new Set(parts.flatMap((p) => p.details))];
+  return alertText(s, parts[0].emoji, parts.map((p) => p.what).join(" · "), details, dashboardUrl, site);
 }
 
-export function deepAlert(s: Session, dashboardUrl: string, site?: AlertSite) {
-  return alertText(s, ":book:", `deep read (${fmtDur(s.engagedMs)})`, [`${s.maxScroll}% scrolled`], dashboardUrl, site);
-}
+export const openAlert = (s: Session, dashboardUrl: string, site?: AlertSite) => composeAlert(s, ["open"], dashboardUrl, site);
+export const hotAlert = (s: Session, dashboardUrl: string, site?: AlertSite) => composeAlert(s, ["hot"], dashboardUrl, site);
+export const deepAlert = (s: Session, dashboardUrl: string, site?: AlertSite) => composeAlert(s, ["deep"], dashboardUrl, site);
 
 export function testAlert(dashboardUrl: string) {
   return `:white_check_mark: *Proposal Pulse is connected*\nAlerts for tracked projects land here: opens, return visits, forwards and deep reads.\n<${stripSlash(dashboardUrl)}|Open the dashboard>`;
