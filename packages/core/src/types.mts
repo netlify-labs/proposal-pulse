@@ -81,6 +81,11 @@ export type SiteRecord = {
   snippetId?: string | null;
   via?: string | null;
   trackedAt?: number | null;
+  /** Netlify's screenshot of the latest production deploy. */
+  screenshotUrl?: string | null;
+  /** Netlify user ID and display name of whoever created the project. */
+  createdBy?: string | null;
+  createdByName?: string | null;
 };
 
 /** Minimal query interface satisfied by both `pg.Pool` and `pg.PoolClient`. */

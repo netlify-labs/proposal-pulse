@@ -39,6 +39,10 @@ export type NetlifySite = {
   createdAt: string;
   /** Last production publish (falls back to the last settings change). */
   publishedAt: string;
+  /** Netlify's screenshot of the latest production deploy. */
+  screenshotUrl: string;
+  /** Netlify user ID of whoever created the project. */
+  createdBy: string;
 };
 
 export function toNetlifySite(s: any): NetlifySite {
@@ -58,7 +62,24 @@ export function toNetlifySite(s: any): NetlifySite {
     teamName: s.account_name || "",
     createdAt: s.created_at || "",
     publishedAt: s.published_deploy?.published_at || s.published_deploy?.created_at || s.updated_at || "",
+    screenshotUrl: s.screenshot_url || s.published_deploy?.screenshot_url || "",
+    createdBy: s.user_id || "",
   };
+}
+
+/** Team members by user ID, cached per function instance for 10 minutes. */
+const memberCache = new Map<string, { at: number; names: Map<string, string> }>();
+
+/** Display name of a Netlify user in a team (full name, else email), or "" if unknown. */
+export async function creatorName(team: string, userId: string): Promise<string> {
+  if (!team || !userId) return "";
+  let hit = memberCache.get(team);
+  if (!hit || Date.now() - hit.at > 10 * 60_000) {
+    const members = await netlifyApi<any[]>(`/${encodeURIComponent(team)}/members`);
+    hit = { at: Date.now(), names: new Map(members.map((m) => [String(m.user_id || m.id), m.full_name || m.email || ""])) };
+    memberCache.set(team, hit);
+  }
+  return hit.names.get(userId) || "";
 }
 
 export const getMe = () => netlifyApi<{ id: string; email: string; full_name: string }>("/user");

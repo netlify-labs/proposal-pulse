@@ -9,6 +9,7 @@ import {
   ownUrl,
   pulseTeams,
   readOrgHook,
+  refreshTrackedSite,
   trackSite,
   upsertSite,
   verifyNetlifySignature,
@@ -40,7 +41,7 @@ export default async (req: Request, context: Context) => {
   let detail = "";
   try {
     hook = readOrgHook(JSON.parse(body));
-    [outcome, detail] = await handle(hook, context);
+    [outcome, detail] = await handle(hook, event, context);
   } catch (e: any) {
     detail = String(e?.message || e).slice(0, 300);
     console.error("site-hook failed", hook.siteId, e);
@@ -58,13 +59,18 @@ export default async (req: Request, context: Context) => {
   return new Response(outcome, { status: 202 });
 };
 
-async function handle(hook: { siteId: string; name: string; team: string }, context: Context): Promise<[string, string]> {
+async function handle(hook: { siteId: string; name: string; team: string }, event: string, context: Context): Promise<[string, string]> {
   if (!isSiteId(hook.siteId)) return ["skipped", "no project id in payload"];
   const teams = pulseTeams();
   if (!teams.length) return ["skipped", "PULSE_TEAMS is not set"];
 
   // Already decided: tracked, untracked by a person, or outside our teams.
   const known = await getSiteRecord(db, hook.siteId);
+  if (known?.status === "tracked" && event === "site_published") {
+    // keep the thumbnail, creator, name and domains current; the snippet is already there
+    await refreshTrackedSite(db, await getSite(hook.siteId));
+    return ["refreshed", known.name];
+  }
   if (known) return ["skipped", `already ${known.status}`];
 
   // site_created carries the team; skip other teams without an API call.

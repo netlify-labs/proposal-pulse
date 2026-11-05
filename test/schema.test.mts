@@ -78,6 +78,20 @@ describe("sites", () => {
   });
 });
 
+describe("thumbnail and creator", () => {
+  test("are saved, and kept when a later update doesn't supply them", async () => {
+    const id = "22222222-2222-3333-4444-555555555555";
+    const base = { ...site, id, host: "thumbs.netlify.app", hosts: ["thumbs.netlify.app"] };
+    await upsertSite(db, { ...base, screenshotUrl: "https://example.test/shot.webp", createdBy: "u1" }, "tracked", { createdByName: "Ada" });
+    expect(await getSiteRecord(db, id)).toMatchObject({ screenshotUrl: "https://example.test/shot.webp", createdBy: "u1", createdByName: "Ada" });
+    await upsertSite(db, base, "tracked", {});
+    expect(await getSiteRecord(db, id)).toMatchObject({ screenshotUrl: "https://example.test/shot.webp", createdByName: "Ada" });
+    await upsertSite(db, { ...base, screenshotUrl: "https://example.test/new.webp" }, "tracked", {});
+    expect((await getSiteRecord(db, id))?.screenshotUrl).toBe("https://example.test/new.webp");
+    await pool.query("DELETE FROM sites WHERE id = $1", [id]);
+  });
+});
+
 describe("beacons", () => {
   test("a visit accumulates, earns open once, and counts the visitor", async () => {
     const p = pool as unknown as Pool;
