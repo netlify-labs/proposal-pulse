@@ -5,6 +5,7 @@ import {
   getMe,
   hostOf,
   json,
+  listTeamSites,
   ownUrl,
   pulseTeams,
   readManageRequest,
@@ -38,6 +39,24 @@ export default async (req: Request, context: Context) => {
         tokenError = String(e?.message || e);
       }
       return json({ me, tokenError, teams: pulseTeams(), slack: slackMode(), dashboardUrl: env("DASHBOARD_URL") });
+    }
+
+    if (r.op === "candidates") {
+      // Projects in PULSE_TEAMS that aren't tracked: never seen (e.g. created before the org webhooks,
+      // or deployed with Drop and never redeployed) or untracked by a person.
+      const ownHosts = [hostOf(collectorUrl), hostOf(env("DASHBOARD_URL"))].filter(Boolean);
+      const [lists, known] = await Promise.all([
+        Promise.all(pulseTeams().map((t) => listTeamSites(t))),
+        db.query<{ id: string; status: string }>("SELECT id, status FROM sites WHERE status IN ('tracked', 'excluded')"),
+      ]);
+      const status = new Map(known.rows.map((k) => [k.id, k.status]));
+      const sites = lists
+        .flat()
+        .filter((s) => status.get(s.id) !== "tracked" && s.id !== context.site?.id && !s.hosts.some((h) => ownHosts.includes(h)))
+        .sort((a, b) => (b.publishedAt || b.createdAt).localeCompare(a.publishedAt || a.createdAt))
+        .slice(0, 2000)
+        .map((s) => ({ id: s.id, name: s.name, team: s.team, url: s.url, createdAt: s.createdAt, publishedAt: s.publishedAt, status: status.get(s.id) === "excluded" ? "excluded" : "new" }));
+      return json({ sites });
     }
 
     if (r.op === "track") {

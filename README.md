@@ -317,7 +317,7 @@ Use the base directory, not the package directory: each app's `netlify.toml` res
 
 Netlify Functions read environment variables at deploy time: redeploy a project after changing its settings.
 
-- **Track a project now:** dashboard **Setup > Projects**, enter its name or URL, click **Track**. Use it for an existing project you're about to share, or to resume tracking after an untrack. Restoring an older deploy does not send `site_published`; a new production deploy or **Track** does.
+- **Track a project now:** dashboard **Setup > Projects > Untracked** lists every project in `PULSE_TEAMS` that isn't tracked, newest first: ones created before the org webhooks, ones deployed with Drop and never redeployed, and ones someone untracked. Select them and click **Track selected**, or enter a name or URL and click **Track**. Restoring an older deploy does not send `site_published`; a new production deploy or **Track** does.
 - **Stop tracking a project:** **Setup > Projects > Untrack**. The snippet is removed and later deploys leave it alone.
 - **A tracked project was deleted:** select it and click **Forget**. Its visit data is removed too.
 - **Pause Slack alerts:** set `SLACK_ALERTS=off` on the collector and redeploy. Alerts that would have fired meanwhile are marked as sent, so resuming does not flood the channel.

@@ -37,6 +37,8 @@ export type NetlifySite = {
   team: string;
   teamName: string;
   createdAt: string;
+  /** Last production publish (falls back to the last settings change). */
+  publishedAt: string;
 };
 
 export function toNetlifySite(s: any): NetlifySite {
@@ -55,6 +57,7 @@ export function toNetlifySite(s: any): NetlifySite {
     team: s.account_slug || "",
     teamName: s.account_name || "",
     createdAt: s.created_at || "",
+    publishedAt: s.published_deploy?.published_at || s.published_deploy?.created_at || s.updated_at || "",
   };
 }
 

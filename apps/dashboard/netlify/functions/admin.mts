@@ -74,6 +74,8 @@ export default async (req: Request) => {
       });
     }
 
+    if (op === "candidates") return json(await collector({ op: "candidates" }));
+
     if (op === "track" && post) {
       const { refs } = (await req.json()) as { refs?: string[] };
       const list = (refs || []).map((r) => String(r).trim()).filter(Boolean);
