@@ -285,17 +285,14 @@ function sessionCard(s,withSite){
 }
 function activity(b){
   var list=S.data.sessions.filter(function(s){return s.unlocked||s.gate});
-  var showAll=S.showBrief;
-  var vis=list.filter(function(s){return showAll||s.human||(!s.unlocked&&s.gate)});
-  var hidden=list.length-vis.length;
+  var vis=list; // every visit, including brief ones (no interaction)
   b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="aq" placeholder="Filter by site or recipient" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+creatorSelect('acr')+
-  (hidden||showAll?'<label class="hint"><input type="checkbox" id="brief" '+(showAll?'checked':'')+'> show brief visits ('+(showAll?list.filter(function(s){return s.unlocked&&!s.human}).length:hidden)+')</label>':'')+'</div><div class="feed" id="feed"></div></div>';
+  '</div><div class="feed" id="feed"></div></div>';
   function draw(){var q=S.q.toLowerCase();var f=vis.filter(function(s){return (!q||s.host.indexOf(q)>-1||(s.r||'').toLowerCase().indexOf(q)>-1)&&(!S.creator||creatorOf(s.host)===S.creator)}).slice(0,200);
     $('feed').innerHTML=f.length?f.map(function(s){return sessionCard(s,true)}).join(''):'<div class="empty">'+(S.data.sessions.length?'No matching activity.':'No activity yet. Once the tracker is on your sites, opens will show up here within seconds.')+'</div>'}
   draw();
   $('aq').oninput=function(){S.q=this.value;draw()};
   if($('acr'))$('acr').onchange=function(){S.creator=this.value;ls('pp_creator',this.value||null);draw()};
-  if($('brief'))$('brief').onchange=function(){S.showBrief=this.checked;activity(b)};
 }
 function proposals(b){
   var sites=bySite().sort(function(a,b){return (b.last-a.last)||(a.name<b.name?-1:1)});
