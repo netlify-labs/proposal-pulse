@@ -97,7 +97,7 @@ Paste this into your coding agent from a clone of this repository:
 | `PULSE_TEAMS` | `acme-sales,acme-cs` | Comma-separated team slugs whose projects get the tracker. |
 | `PREFIX` | `acme-pulse` | Project name prefix: creates `<PREFIX>-collector` and `<PREFIX>-dashboard`. |
 | Netlify token | (user provides) | Personal access token with edit access to every team in `PULSE_TEAMS`. |
-| Slack webhook | (optional) | Incoming Webhook or Workflow Builder webhook URL for alerts. |
+| Slack webhook | (optional) | Incoming Webhook or Workflow Builder webhook URL for alerts. See [Slack alerts](#slack-alerts) to create one. |
 | Organization Owner | (a person) | Someone who can run step 10. |
 
 ### Part 1: Prepare
@@ -150,7 +150,7 @@ Done when: `apps/collector/.netlify/state.json` and `apps/dashboard/.netlify/sta
 | `HOOK_SECRET` | required, secret | Contents of `~/.proposal-pulse-hook-secret`. Verifies org webhooks and dashboard requests. |
 | `PULSE_TEAMS` | required | Team slugs to track, comma-separated. Empty means nothing is tracked. |
 | `DASHBOARD_URL` | required | Linked from Slack alerts, and never tracked itself. |
-| `SLACK_WEBHOOK_URL` | optional, secret | Slack Incoming Webhook or Workflow Builder webhook. |
+| `SLACK_WEBHOOK_URL` | optional, secret | Slack Incoming Webhook or Workflow Builder webhook ([Slack alerts](#slack-alerts)). |
 | `SLACK_ALERTS` | optional | `off` pauses alerts without removing the webhook. |
 | `RETENTION_DAYS` | optional | Days of visit data to keep. Default 180. |
 
@@ -296,6 +296,48 @@ To deploy both projects on every merge to `main`, link each one to your fork und
 | Production branch | `main` | `main` |
 
 Use the base directory, not the package directory: each app's `netlify.toml` resolves `public` and `netlify/functions` relative to it. The whole repository is still checked out, so `packages/core` resolves.
+
+## Slack alerts
+
+Optional. The collector posts to one Slack channel when a tracked proposal is:
+
+- **opened** for the first time (with "Back again" for a return visit, and "New person opened" when a different browser opens it, a likely forward);
+- **read for 2+ minutes**.
+
+Each alert fires at most once per visit and links to the proposal and to its page in the dashboard. Proposal Pulse accepts either kind of Slack webhook and detects which one from the URL.
+
+| | Workflow Builder webhook | Incoming Webhook (Slack app) |
+|---|---|---|
+| URL | `hooks.slack.com/triggers/...` | `hooks.slack.com/services/...` |
+| Set up by | Anyone who can build workflows (paid Slack plans) | Creating a Slack app; may need workspace admin approval |
+| Message | Plain text; links show as URLs (still clickable) | Bold headlines and labelled links |
+| Change the channel | Edit the workflow in Slack | Create a new webhook |
+
+### Option A: Workflow Builder webhook
+
+1. In Slack, open **Tools > Workflow Builder > New workflow** and choose the trigger **From a webhook**.
+2. Under **Data Variables**, add one variable: key `text`, data type **Text**. The name must be exactly `text`; it is the only field Proposal Pulse sends. The example body should read `{"text": "Example text"}`.
+3. Click **Continue**, then add the step **Send a message to a channel**. Pick the channel and, in the message, use **Insert a variable > text** with nothing else around it. Each alert arrives fully written.
+4. **Publish**, then copy the **Web request URL** from the webhook trigger.
+
+### Option B: Incoming Webhook
+
+1. At [api.slack.com/apps](https://api.slack.com/apps), choose **Create New App > From scratch** and pick your workspace.
+2. Open **Incoming Webhooks**, switch it on, click **Add New Webhook to Workspace** and choose the channel.
+3. Copy the webhook URL.
+
+### Connect it
+
+The webhook URL lets anyone post to that channel, so treat it as a secret. In `apps/collector`:
+
+```bash
+netlify env:set SLACK_WEBHOOK_URL <webhook-url> --secret --context production deploy-preview branch-deploy
+netlify deploy --prod --message "Slack alerts on"
+```
+
+If the collector deploys from Git, trigger a new production deploy instead (**Deploys > Trigger deploy**); functions read environment variables at deploy time.
+
+To test, open any tracked proposal in a normal browser window and click or scroll on it. An "Opened" alert should arrive within a few seconds. If nothing arrives, check the collector's function logs for `slack error` (`netlify logs --source functions --function collect`).
 
 ## Operating it
 
