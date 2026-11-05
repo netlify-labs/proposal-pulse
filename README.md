@@ -1,8 +1,8 @@
 # Proposal Pulse
 
-**TL;DR:** See who opens the sites you share (proposals, pitch pages, previews), what they read, and when to follow up. Every new project in the Netlify teams you choose gets a small tracker automatically, through Netlify organization webhooks and Snippet Injection. Visits land in Netlify Database and show up in a dashboard protected by Netlify team login, with optional Slack alerts.
+**TL;DR:** See who opens the sites you share (proposals, pitch pages, previews), what they read, and when to follow up. Every new project in the Netlify teams you choose gets a small tracker automatically, through Netlify organization webhooks and Snippet Injection. Visits land in Netlify Database and show up in a protected dashboard, with optional Slack alerts.
 
-To install it into your Netlify account with an AI coding agent, jump to [Set up with an AI agent](#set-up-with-an-ai-agent).
+Setting it up with an AI coding agent? Go to [Setup](#setup).
 
 ## What it does
 
@@ -11,25 +11,73 @@ To install it into your Netlify account with an AI coding agent, jump to [Set up
 - **Forward detection:** a new browser opening the same project shows up as "new person opened".
 - **Password-protected projects:** visits to the Netlify password page are recorded separately, including wrong attempts.
 - **Slack alerts (optional):** first open, return visit, possible forward, booking-link click (Calendly, Google Calendar, Zoom, HubSpot meetings and more), and reads over 2 minutes.
-- **Hands-off enrollment:** a new project in your teams gets the tracker within seconds of being created. Existing projects get it on their next production deploy. Untrack a project once and it stays untracked.
+- **Hands-off enrollment:** a new project in your teams gets the tracker within seconds of being created, and existing projects on their next production deploy. Untrack a project once and it stays untracked.
 
 ## How it works
 
-```
- Netlify organization                     Collector project (public)                  Dashboard project (team login)
- ────────────────────                     ──────────────────────────                  ──────────────────────────────
- site_created / site_published ──signed──▶ /hooks/netlify-site                         /api/data, /api/admin
-                                           │ verify signature, check team,             │ reads Netlify Database
-                                           │ inject <script src=".../t.js"> via         │ directly (PULSE_DATABASE_URL)
-                                           │ Snippet Injection                          │
- Visitor's browser on a tracked project    │                                            │
- t.js ──────────── beacons ───────────────▶ /api/t ──▶ Netlify Database ◀───────────────┘
-                                                  └──▶ Slack alerts (optional)
+```mermaid
+flowchart LR
+  netlify(["Netlify org webhooks<br/>site_created · site_published"])
+  visitor(["Visitor's browser"])
+  slack(["Slack<br/>optional"])
+
+  subgraph yours["Your tracked projects"]
+    proj["Proposal site<br/>+ tracker snippet"]
+  end
+
+  subgraph collector["Collector project · public"]
+    hook["Webhook receiver<br/>/hooks/netlify-site"]
+    beacon["Beacon endpoint<br/>/api/t"]
+    manage["Admin endpoint<br/>/api/manage"]
+    db[("Netlify Database")]
+  end
+
+  subgraph dashboard["Dashboard project · team login"]
+    ui["Dashboard UI"]
+  end
+
+  netlify -- "signed event" --> hook
+  hook -- "adds snippet via Snippet Injection" --> proj
+  visitor -- "opens shared link" --> proj
+  proj -- "t.js sends beacons" --> beacon
+  hook --> db
+  beacon --> db
+  beacon -.-> slack
+  ui -- "read-only queries" --> db
+  ui -- "track · untrack · forget (signed)" --> manage
+  manage --> db
 ```
 
-- **`apps/collector`** must stay public: visitors' browsers load `t.js` and send beacons to it, and Netlify delivers org webhooks to it, and none of those can pass site protection. It owns the Netlify Database (provisioned for this project; migrations in `apps/collector/netlify/database/migrations`) and has no endpoint that returns visit data. It can live in any team in the organization.
-- **`apps/dashboard`** sits behind Netlify team login or Netlify password protection. It reads the collector's database directly with a **read-only** role. To track, untrack or forget a project it sends a request to the collector's `/api/manage`, signed with `HOOK_SECRET`. The collector is the only writer and the only project that holds a Netlify token.
-- **`packages/core`** is shared, dependency-free code: the Netlify API client, webhook signature check, session logic, Slack formatting and `sites` queries.
+```mermaid
+sequenceDiagram
+  autonumber
+  participant N as Netlify
+  participant C as Collector
+  participant P as New project
+  participant V as Visitor
+  participant DB as Netlify Database
+  participant D as Dashboard
+  N->>C: site_created (signed with HOOK_SECRET)
+  C->>C: verify signature, check team is in PULSE_TEAMS
+  C->>P: add tracker snippet (live, no redeploy)
+  C->>DB: record project as tracked
+  V->>P: opens the shared link
+  P->>C: t.js beacons: view, read time, scroll, clicks
+  C->>DB: update the visit
+  D->>DB: read visits (read-only role)
+```
+
+### The two projects
+
+| | Collector (`apps/collector`) | Dashboard (`apps/dashboard`) |
+|---|---|---|
+| Access | **Must be public.** Visitors' browsers and Netlify's webhook deliveries can't pass site protection. | **Always protected:** Netlify team login (recommended) or Netlify password protection. |
+| Job | Receives org webhooks, adds the tracker snippet, receives beacons, sends Slack alerts. | Shows visits, proposals and webhook health; track, untrack and forget projects. |
+| Database | Owns it: provisioned for this project, migrations in `apps/collector/netlify/database/migrations`. The only writer. | Reads it with a read-only role. Sends every change to the collector, signed with `HOOK_SECRET`. |
+| Netlify token | Holds it (adds and removes snippets). | None. |
+| Team | Any team in the organization. | Any team in the organization. |
+
+`packages/core` holds the shared, dependency-free code: Netlify API client, signature checks, visit logic, Slack formatting and `sites` queries. Neither project returns visit data publicly.
 
 ### Data and privacy
 
@@ -40,35 +88,35 @@ The tracker sets no cookies and the collector stores no IP addresses. It keeps a
 - A **Netlify organization** (Enterprise). Organization webhooks only fire for teams inside an organization.
 - An **Organization Owner** for one step: subscribing the two org webhooks. Owning a team is not enough.
 - **Netlify Database** available on the team that hosts the collector.
-- A **Netlify personal access token** for the app, from a user who can edit projects in every team you want to track. Proposal Pulse uses it to add and remove the tracker snippet.
+- A **Netlify personal access token** from a user who can edit projects in every team you want to track. The collector uses it to add and remove the tracker snippet.
 - Node.js 20.12.2 or later and Netlify CLI 26 or later (`npm install -g netlify-cli`).
 
-## Set up with an AI agent
+## Setup
 
 Paste this into your coding agent from a clone of this repository:
 
-> Set up Proposal Pulse in my Netlify account by following the "Agent setup steps" section of README.md exactly, one step at a time.
+> Set up Proposal Pulse in my Netlify account by following the Setup section of README.md exactly, one step at a time.
 
-### Agent setup steps
-
-**Working rules for the agent**
+### Rules for the agent
 
 - Collect every value in the inputs table from the user before step 1. Team slugs come from `app.netlify.com/teams/<slug>`; ask rather than guess.
-- Treat `NETLIFY_TOKEN`, `HOOK_SECRET`, `PULSE_DATABASE_URL` and `SLACK_WEBHOOK_URL` as secrets: pass them through shell variables or files with mode 600 outside the repository, keep them out of output, logs and commits, and let the user type the token commands that contain their personal access token.
+- Treat `NETLIFY_TOKEN`, `HOOK_SECRET`, `PULSE_DATABASE_URL` and `SLACK_WEBHOOK_URL` as secrets: pass them through files with mode 600 outside the repository, keep them out of output, logs and commits, and let the user type the commands that contain their personal access token.
 - Shell variables may not survive between your commands. Re-derive values from the inputs, or read them from the files you created.
 - Run each command from the directory shown. If a command fails, stop and show the user the exact error and the project it affected.
 - Every step ends with a **Done when** check. Run the check and confirm it passes before starting the next step.
 
-**Inputs**
+### Inputs
 
 | Input | Example | Meaning |
 |---|---|---|
 | `HOME_TEAM` | `acme-web` | Team slug that will own the two Proposal Pulse projects. |
 | `PULSE_TEAMS` | `acme-sales,acme-cs` | Comma-separated team slugs whose projects get the tracker. |
-| `PREFIX` | `acme-pulse` | Project name prefix. Creates `<PREFIX>-collector` and `<PREFIX>-dashboard`. |
+| `PREFIX` | `acme-pulse` | Project name prefix: creates `<PREFIX>-collector` and `<PREFIX>-dashboard`. |
 | Netlify token | (user provides) | Personal access token with edit access to every team in `PULSE_TEAMS`. |
 | Slack webhook | (optional) | Incoming Webhook or Workflow Builder webhook URL for alerts. |
-| Organization Owner | (a person) | Someone who can run step 8. |
+| Organization Owner | (a person) | Someone who can run step 10. |
+
+### Part 1: Prepare
 
 **Step 1. Check prerequisites**
 
@@ -92,11 +140,14 @@ npm test
 
 Done when: `npm test` reports all tests passed. One skipped test is expected; it needs a separate Postgres.
 
-**Step 3. Create the two projects**
+**Step 3. Create both projects and the shared secret**
+
+Both projects are created first so each can be configured with the other's URL.
 
 ```bash
 cd apps/collector && netlify sites:create --name "$PREFIX-collector" --account-slug "$HOME_TEAM" && cd ../..
 cd apps/dashboard && netlify sites:create --name "$PREFIX-dashboard" --account-slug "$HOME_TEAM" && cd ../..
+umask 077 && openssl rand -hex 32 > ~/.proposal-pulse-hook-secret
 ```
 
 If a name is taken, choose another with the user and use it everywhere below. Record:
@@ -105,23 +156,23 @@ If a name is taken, choose another with the user and use it everywhere below. Re
 - `DASHBOARD_URL` = `https://<dashboard project name>.netlify.app`
 - `DASHBOARD_SITE_ID` = `siteId` in `apps/dashboard/.netlify/state.json`
 
-Done when: `apps/collector/.netlify/state.json` and `apps/dashboard/.netlify/state.json` each contain a `siteId`, and the two IDs differ.
+Done when: `apps/collector/.netlify/state.json` and `apps/dashboard/.netlify/state.json` each contain a different `siteId`, and `~/.proposal-pulse-hook-secret` exists.
 
-**Step 4. Protect the dashboard with team login**
+### Part 2: Collector project (public)
 
-```bash
-netlify api updateSite --data "{\"site_id\":\"$DASHBOARD_SITE_ID\",\"body\":{\"sso_login\":true,\"sso_login_context\":\"all\"}}"
-```
+| Setting | | Value |
+|---|---|---|
+| `NETLIFY_TOKEN` | required, secret | The personal access token. Adds and removes the tracker snippet. |
+| `HOOK_SECRET` | required, secret | Contents of `~/.proposal-pulse-hook-secret`. Verifies org webhooks and dashboard requests. |
+| `PULSE_TEAMS` | required | Team slugs to track, comma-separated. Empty means nothing is tracked. |
+| `DASHBOARD_URL` | required | Linked from Slack alerts, and never tracked itself. |
+| `SLACK_WEBHOOK_URL` | optional, secret | Slack Incoming Webhook or Workflow Builder webhook. |
+| `SLACK_ALERTS` | optional | `off` pauses alerts without removing the webhook. |
+| `RETENTION_DAYS` | optional | Days of visit data to keep. Default 180. |
 
-Done when: `netlify api getSite --data "{\"site_id\":\"$DASHBOARD_SITE_ID\"}"` shows `"sso_login": true`. If the API rejects it, ask the user to turn on team login under the dashboard project's **Project configuration > Access & security > Site protection**, then re-run the check.
+Leave site protection **off** on this project, even if its team protects new projects by default.
 
-**Step 5. Configure the collector** (`apps/collector`)
-
-Create the webhook signing secret once and keep it in a private file outside the repository:
-
-```bash
-umask 077 && openssl rand -hex 32 > ~/.proposal-pulse-hook-secret
-```
+**Step 4. Configure the collector** (`apps/collector`)
 
 ```bash
 cd apps/collector
@@ -130,21 +181,16 @@ netlify env:set PULSE_TEAMS "$PULSE_TEAMS"
 netlify env:set DASHBOARD_URL "$DASHBOARD_URL"
 ```
 
-Ask the user to run this themselves in `apps/collector`, with their token in place of `<token>`:
+Ask the user to run these themselves in `apps/collector`, with their values in place of the placeholders (Slack is optional):
 
 ```bash
 netlify env:set NETLIFY_TOKEN <token> --secret --context production deploy-preview branch-deploy
-```
-
-Optional Slack alerts (user runs it, same folder):
-
-```bash
 netlify env:set SLACK_WEBHOOK_URL <slack-webhook-url> --secret --context production deploy-preview branch-deploy
 ```
 
-Done when: `netlify env:list --json` in `apps/collector` lists `HOOK_SECRET`, `NETLIFY_TOKEN`, `PULSE_TEAMS` and `DASHBOARD_URL` (plus `SLACK_WEBHOOK_URL` if the user chose alerts).
+Done when: `netlify env:list --json` in `apps/collector` lists `HOOK_SECRET`, `NETLIFY_TOKEN`, `PULSE_TEAMS` and `DASHBOARD_URL`.
 
-**Step 6. Deploy the collector** (`apps/collector`)
+**Step 5. Deploy the collector** (`apps/collector`)
 
 ```bash
 netlify deploy --prod --message "Proposal Pulse collector"
@@ -156,13 +202,30 @@ Done when all three pass:
 
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" "$COLLECTOR_URL/t.js"                          # 200
-curl -s -o /dev/null -w "%{http_code}\n" -X POST "$COLLECTOR_URL/hooks/netlify-site"    # 401 (bad signature: receiver is live)
+curl -s -o /dev/null -w "%{http_code}\n" -X POST "$COLLECTOR_URL/hooks/netlify-site"    # 401: receiver is live, signature required
 netlify database status --branch production --json                                      # initial_schema under "applied"
 ```
 
-**Step 7. Configure and deploy the dashboard** (`apps/dashboard`)
+### Part 3: Dashboard project (protected)
 
-Copy the collector's production connection string to the dashboard without printing it. `production` is the database branch behind production deploys:
+| Setting | | Value |
+|---|---|---|
+| `PULSE_DATABASE_URL` | required, secret | The collector's production connection string. A read-only role, by design. |
+| `HOOK_SECRET` | required, secret | Same value as the collector. Signs the dashboard's requests to the collector. |
+| `COLLECTOR_URL` | required | Where those requests go. |
+| `DASHBOARD_PASSWORD` | optional, secret | Extra in-app password on top of site protection. |
+
+**Step 6. Protect the dashboard**
+
+```bash
+netlify api updateSite --data "{\"site_id\":\"$DASHBOARD_SITE_ID\",\"body\":{\"sso_login\":true,\"sso_login_context\":\"all\"}}"
+```
+
+Done when: `netlify api getSite --data "{\"site_id\":\"$DASHBOARD_SITE_ID\"}"` shows `"sso_login": true`. If the API rejects it, ask the user to turn on team login (or Netlify password protection) under the dashboard project's **Project configuration > Access & security > Site protection**, then re-run the check.
+
+**Step 7. Configure the dashboard** (`apps/dashboard`)
+
+Copy the collector's production connection string without printing it. `production` is the database branch behind production deploys:
 
 ```bash
 cd apps/collector
@@ -170,29 +233,30 @@ netlify database status --branch production --show-credentials --json \
   | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const u=JSON.parse(s).database?.connectionString;if(!u){console.error("no connection string found");process.exit(1)}require("fs").writeFileSync(require("os").homedir()+"/.proposal-pulse-db-url",u,{mode:0o600})})'
 cd ../dashboard
 netlify env:set PULSE_DATABASE_URL "$(cat ~/.proposal-pulse-db-url)" --secret --context production deploy-preview branch-deploy
+netlify env:set HOOK_SECRET "$(cat ~/.proposal-pulse-hook-secret)" --secret --context production deploy-preview branch-deploy
+netlify env:set COLLECTOR_URL "$COLLECTOR_URL"
 rm ~/.proposal-pulse-db-url
 ```
 
-Then, still in `apps/dashboard`:
+Done when: `netlify env:list --json` in `apps/dashboard` lists `PULSE_DATABASE_URL`, `HOOK_SECRET` and `COLLECTOR_URL`.
 
-```bash
-netlify env:set HOOK_SECRET "$(cat ~/.proposal-pulse-hook-secret)" --secret --context production deploy-preview branch-deploy
-netlify env:set COLLECTOR_URL "$COLLECTOR_URL"
-```
-
-The connection string is a read-only role (`netlifydb_readonly`). That is intended: the dashboard only reads, and asks the collector for every change.
-
-Then deploy:
+**Step 8. Deploy the dashboard** (`apps/dashboard`)
 
 ```bash
 netlify deploy --prod --message "Proposal Pulse dashboard"
 ```
 
-Done when: `curl -s -o /dev/null -w "%{http_code}\n" "$DASHBOARD_URL/"` returns `401` (team login is on), and the user opens `DASHBOARD_URL`, signs in, and confirms the **Setup** tab shows Database, Collector and Netlify token as connected.
+Done when: `curl -s -o /dev/null -w "%{http_code}\n" "$DASHBOARD_URL/"` returns `401` (protection is on), and the user opens `DASHBOARD_URL`, signs in, and confirms the **Setup** tab shows Database, Collector and Netlify token as connected.
 
-**Step 8. Subscribe the organization webhooks** (Organization Owner)
+### Part 4: Organization webhooks
 
-The Organization Owner runs this with their own personal access token in `ORG_OWNER_TOKEN`, plus `ORG_ID`, `COLLECTOR_URL` and the contents of `~/.proposal-pulse-hook-secret` as `HOOK_SECRET`. Give them those three values; never ask for their token.
+**Step 9. Hand over the subscription values**
+
+Give the Organization Owner `ORG_ID`, `COLLECTOR_URL` and the contents of `~/.proposal-pulse-hook-secret`. They use their own personal access token; never ask for it.
+
+Done when: the Organization Owner has the three values.
+
+**Step 10. Subscribe** (the Organization Owner runs this)
 
 ```bash
 for EVENT in site_created site_published; do
@@ -205,7 +269,9 @@ done
 
 Done when: both calls return JSON with an `id`. A `404` means the token does not belong to an Organization Owner of `ORG_ID`.
 
-**Step 9. Prove it end to end**
+### Part 5: Verify and finish
+
+**Step 11. Prove it end to end**
 
 Create a throwaway project in one of the `PULSE_TEAMS` teams and record its `id`:
 
@@ -219,7 +285,7 @@ Within 60 seconds the tracker snippet should be on it:
 netlify api listSiteSnippets --data '{"site_id":"<test project id>"}'
 ```
 
-Then delete the test project, and in the dashboard's **Setup** tab select it and click **Forget**:
+Then delete it, and in the dashboard's **Setup > Projects** select it and click **Forget**:
 
 ```bash
 netlify api deleteSite --data '{"site_id":"<test project id>"}'
@@ -227,63 +293,38 @@ netlify api deleteSite --data '{"site_id":"<test project id>"}'
 
 Done when: the snippet list showed `"title": "Proposal Pulse tracker"` with `<script async src="<COLLECTOR_URL>/t.js">`, and the test project is deleted. If no snippet appears, open **Setup > Org webhook > Recent deliveries** in the dashboard: the `outcome` and `detail` columns say what happened.
 
-**Step 10. Finish**
+**Step 12. Finish**
 
 ```bash
 rm ~/.proposal-pulse-hook-secret
 ```
 
-Done when: the user has `DASHBOARD_URL`, knows that new projects in `PULSE_TEAMS` are tracked on creation and existing ones on their next production deploy, and knows how to untrack a project (**Setup > Projects > Untrack**).
+Done when: the user has `DASHBOARD_URL`, knows new projects in `PULSE_TEAMS` are tracked on creation and existing ones on their next production deploy or with **Track**, and knows how to untrack a project.
 
-## Configuration reference
+### Deploy from Git (optional)
 
-Netlify sets each project's own production URL as `URL`, so neither project needs its own address configured.
-
-**Collector**
-
-| Variable | | Purpose |
-|---|---|---|
-| `NETLIFY_TOKEN` | required, secret | Personal access token used to add the tracker snippet. Needs edit access to every team in `PULSE_TEAMS`. |
-| `HOOK_SECRET` | required, secret | Signing secret shared with the org webhooks. |
-| `PULSE_TEAMS` | required | Comma-separated team slugs to track. Empty means nothing is tracked. |
-| `DASHBOARD_URL` | required | Dashboard's URL: linked from Slack alerts, and never tracked. |
-| `SLACK_WEBHOOK_URL` | optional, secret | Slack Incoming Webhook or Workflow Builder webhook. |
-| `SLACK_ALERTS` | optional | Set to `off` to pause alerts without removing the webhook. |
-| `RETENTION_DAYS` | optional | Days of visit data to keep. Default 180. |
-
-**Dashboard**
-
-| Variable | | Purpose |
-|---|---|---|
-| `PULSE_DATABASE_URL` | required, secret | The collector's read-only production database connection string (step 7). |
-| `HOOK_SECRET` | required, secret | Same value as the collector; signs the dashboard's requests to the collector. |
-| `COLLECTOR_URL` | required | Collector's URL, for those requests. |
-| `DASHBOARD_PASSWORD` | optional, secret | Extra in-app password on top of team login. |
-
-Netlify Functions read environment variables at deploy time: redeploy a project after changing its variables.
-
-## Deploy from Git
-
-After setup you can link each project to your fork, so a merge to `main` deploys both. In each project's **Build & deploy** settings, connect the repository and set:
+To deploy both projects on every merge to `main`, link each one to your fork under **Project configuration > Build & deploy**:
 
 | | Collector | Dashboard |
 |---|---|---|
 | Base directory | `apps/collector` | `apps/dashboard` |
 | Build command | (empty) | (empty) |
-| Branch | `main` | `main` |
+| Production branch | `main` | `main` |
 
-Set the base directory, not the package directory: each app's `netlify.toml` resolves `public` and `netlify/functions` relative to the base directory. The rest of the repository is still checked out, so the shared `packages/core` code resolves.
+Use the base directory, not the package directory: each app's `netlify.toml` resolves `public` and `netlify/functions` relative to it. The whole repository is still checked out, so `packages/core` resolves.
 
 ## Operating it
 
-- **Pause Slack alerts:** set `SLACK_ALERTS=off` on the collector and redeploy. Alerts that would have fired meanwhile are marked as sent, so turning alerts back on does not flood the channel.
-- **Track a project now:** dashboard **Setup > Projects**, enter its name or URL and click **Track**. Use it for an existing project you are about to share, or to turn tracking back on after an untrack.
-- **Stop tracking a project:** dashboard **Setup > Projects > Untrack**. The snippet is removed and later deploys leave it alone.
-- **A tracked project was deleted:** select it and click **Forget**.
-- **Rotate the database credentials:** repeat the connection-string part of step 7 and redeploy the dashboard.
+Netlify Functions read environment variables at deploy time: redeploy a project after changing its settings.
+
+- **Track a project now:** dashboard **Setup > Projects**, enter its name or URL, click **Track**. Use it for an existing project you're about to share, or to resume tracking after an untrack. Restoring an older deploy does not send `site_published`; a new production deploy or **Track** does.
+- **Stop tracking a project:** **Setup > Projects > Untrack**. The snippet is removed and later deploys leave it alone.
+- **A tracked project was deleted:** select it and click **Forget**. Its visit data is removed too.
+- **Pause Slack alerts:** set `SLACK_ALERTS=off` on the collector and redeploy. Alerts that would have fired meanwhile are marked as sent, so resuming does not flood the channel.
+- **Webhook health:** **Setup > Org webhook** shows the last delivery and per-outcome counts for 24 hours. Every org event is logged, including other teams' (`ignored`).
+- **Rotate the database credentials:** repeat step 7 and redeploy the dashboard.
 - **Schema changes:** add a new timestamped `.sql` file under `apps/collector/netlify/database/migrations` and deploy the collector. Keep migrations additive (new tables, nullable columns), since the dashboard reads the same database and may deploy separately. Never edit or delete an applied migration.
-- **Webhook health:** the dashboard's **Setup > Org webhook** shows the last delivery and per-outcome counts for the last 24 hours. Every org event is logged, including events for teams you don't track (`ignored`).
-- **Deploy previews of the collector** get their own database branch copied from production, which includes visitor data. Keep preview links private.
+- **Collector deploy previews** get their own database branch copied from production, including visitor data. Keep those preview links private.
 
 ## Development
 
@@ -294,11 +335,17 @@ npm test                                       # unit tests + schema tests on a 
 TEST_DATABASE_URL=postgres://... npm test      # also runs the concurrency test against a real, empty Postgres
 ```
 
+CI (`.github/workflows/test.yml`) runs both on every pull request, the second against a Postgres service container.
+
 ```
 apps/
-  collector/   public project: t.js, /api/t beacons, /hooks/netlify-site, daily cleanup, database migrations
-  dashboard/   team-login project: dashboard UI, /api/data, /api/admin
+  collector/   public: t.js, /api/t beacons, /hooks/netlify-site, /api/manage, daily cleanup, database migrations
+  dashboard/   protected: dashboard UI, /api/data, /api/admin
 packages/
   core/        shared code used by both apps
 test/          unit and schema tests
 ```
+
+## License
+
+MIT. Use it, change it, ship it. See [LICENSE](LICENSE).
