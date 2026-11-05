@@ -40,37 +40,36 @@ export function fmtDur(ms: number) {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
-const who = (s: Session) => (s.r ? `*${s.r}*` : "unknown (no personal link)");
-const where = (s: Session) => [s.city, s.cc].filter(Boolean).join(", ") || "unknown location";
-const device = (s: Session) => `${s.device} · ${s.browser}/${s.os}`;
+/**
+ * Alert layout (two lines, dashboard link only, so Slack doesn't expand proposal previews):
+ *   🔥 *proposal-name* · by Creator · what happened
+ *   recipient · place · details → https://dashboard/#site=host
+ */
+export type AlertSite = { createdByName?: string | null };
 
-function links(s: Session, dashboardUrl: string) {
+function alertText(s: Session, emoji: string, what: string, details: string[], dashboardUrl: string, site?: AlertSite) {
   const dash = stripSlash(dashboardUrl);
-  return {
-    site: `<https://${s.host}|${siteLabel(s.host)}>`,
-    dash: dash ? `\n<${dash}/#site=${encodeURIComponent(s.host)}|Open in Proposal Pulse>` : "",
-  };
+  const url = dash ? `${dash}/#site=${encodeURIComponent(s.host)}` : `https://${s.host}`;
+  const by = site?.createdByName ? ` · by ${site.createdByName}` : "";
+  const place = [s.city, s.cc].filter(Boolean).join(", ") || "Unknown location";
+  const line2 = [s.r ? `*${s.r}*` : "", place, ...details].filter(Boolean).join(" · ");
+  return `${emoji} *${siteLabel(s.host)}*${by} · ${what}\n${line2} → ${url}`;
 }
 
-export function openAlert(s: Session, dashboardUrl: string) {
-  const { site, dash } = links(s, dashboardUrl);
-  let headline = `:eyes: *Opened*: ${site}`;
-  let context = "First visit";
-  if (s.newVisitor && s.visitorCount > 1) {
-    headline = `:busts_in_silhouette: *New person opened*: ${site}`;
-    context = `Possibly forwarded: ${s.visitorCount} different people have opened it`;
-  } else if (!s.newVisitor && s.visitNo > 1) {
-    headline = `:repeat: *Back again*: ${site}`;
-    context = `Visit #${s.visitNo} from this person`;
-  }
-  const ref = s.ref ? ` · via ${s.ref}` : "";
-  return `${headline}\nWho: ${who(s)} · ${where(s)} · ${device(s)}\n${context}${ref}${dash}`;
+export function openAlert(s: Session, dashboardUrl: string, site?: AlertSite) {
+  if (s.newVisitor && s.visitorCount > 1)
+    return alertText(s, ":busts_in_silhouette:", `new person opened it (${s.visitorCount} people so far, possible forward)`, [], dashboardUrl, site);
+  if (!s.newVisitor && s.visitNo > 1) return alertText(s, ":repeat:", `came back (visit #${s.visitNo})`, [], dashboardUrl, site);
+  return alertText(s, ":eyes:", "opened (first visit)", s.ref ? [`via ${s.ref}`] : [], dashboardUrl, site);
 }
 
-export function deepAlert(s: Session, dashboardUrl: string) {
-  const { site, dash } = links(s, dashboardUrl);
-  const secs = s.sections.length ? `\nRead: ${s.sections.slice(0, 8).join(" → ")}` : "";
-  return `:book: *Deep read*: ${site}\nWho: ${who(s)} · ${where(s)}\n${fmtDur(s.engagedMs)} so far · ${s.maxScroll}% scrolled${secs}${dash}`;
+export function hotAlert(s: Session, dashboardUrl: string, site?: AlertSite) {
+  const n = s.clicks.length;
+  return alertText(s, ":fire:", "read to the end and clicked", [fmtDur(s.engagedMs), `${n} click${n === 1 ? "" : "s"}`], dashboardUrl, site);
+}
+
+export function deepAlert(s: Session, dashboardUrl: string, site?: AlertSite) {
+  return alertText(s, ":book:", `deep read (${fmtDur(s.engagedMs)})`, [`${s.maxScroll}% scrolled`], dashboardUrl, site);
 }
 
 export function testAlert(dashboardUrl: string) {

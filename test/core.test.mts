@@ -6,6 +6,8 @@ import {
   newSession,
   parseUA,
   readManageRequest,
+  openAlert,
+  hotAlert,
   readOrgHook,
   signManageRequest,
   signNetlifyWebhook,
@@ -69,7 +71,7 @@ describe("session folding and alerts", () => {
 
     const click = ev("click", { l: "Book a call", u: "https://calendly.com/acme/30min" });
     applyEvent(s, click, 2);
-    expect(newAlerts(s, click)).toEqual([]);
+    expect(newAlerts(s, click)).toEqual([]); // clicked, but hasn't reached the end yet
     expect(s.clicks.at(-1)).toMatchObject({ label: "Book a call", href: "https://calendly.com/acme/30min" });
 
     for (let i = 0; i < 5; i++) applyEvent(s, ev("hb", { ms: 30_000, sc: 80 }), 3 + i);
@@ -112,5 +114,29 @@ describe("signed admin requests (dashboard -> collector)", () => {
     expect(readManageRequest(body, signature, SECRET, 1_000_000 + 6 * 60_000)).toBeNull();
     const bad = signManageRequest({ op: "drop" as any }, SECRET, 1_000_000);
     expect(readManageRequest(bad.body, bad.signature, SECRET, 1_000_000)).toBeNull();
+  });
+});
+
+describe("🔥 alert and Slack format", () => {
+  test("read to the end and clicked fires 🔥 once", () => {
+    const s = newSession(ev("view"), "", {}, 0);
+    applyEvent(s, ev("view"), 0);
+    applyEvent(s, ev("interact"), 1);
+    expect(newAlerts(s, ev("interact"))).toEqual(["open"]);
+    applyEvent(s, ev("hb", { sc: 95 }), 2);
+    expect(newAlerts(s, ev("hb"))).toEqual([]); // reached the end, no click yet
+    applyEvent(s, ev("click", { l: "Pricing" }), 3);
+    expect(newAlerts(s, ev("click"))).toEqual(["hot"]);
+    expect(newAlerts(s, ev("click"))).toEqual([]);
+  });
+
+  test("two compact lines with creator and a dashboard link only", () => {
+    const s = { ...newSession(ev("view"), "", { city: "London", cc: "GB" }, 0), r: "jane", engagedMs: 196_000, clicks: [{ t: 0, label: "a" }, { t: 0, label: "b" }] };
+    expect(hotAlert(s, "https://dash.example.com/", { createdByName: "Marina" })).toBe(
+      ":fire: *deal.example.com* · by Marina · read to the end and clicked\n*jane* · London, GB · 3m 16s · 2 clicks → https://dash.example.com/#site=deal.example.com",
+    );
+    expect(openAlert({ ...s, r: "", newVisitor: true, visitorCount: 1 }, "https://dash.example.com", {})).toBe(
+      ":eyes: *deal.example.com* · opened (first visit)\nLondon, GB → https://dash.example.com/#site=deal.example.com",
+    );
   });
 });
