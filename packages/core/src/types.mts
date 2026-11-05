@@ -1,5 +1,5 @@
-/** One click recorded on a tracked page. `hot` marks booking, email and phone links. */
-export type Click = { t: number; label: string; href?: string; hot?: boolean };
+/** One click on a link or button on a tracked page. */
+export type Click = { t: number; label: string; href?: string };
 
 /**
  * One visit (a browser tab session) to a tracked site. Stored as JSON in `sessions.data`
@@ -40,7 +40,7 @@ export type Session = {
   title: string;
 };
 
-export type AlertType = "open" | "hot" | "deep";
+export type AlertType = "open" | "deep";
 
 /** Beacon sent by t.js. Short keys keep the payload small. */
 export type BeaconEvent = {

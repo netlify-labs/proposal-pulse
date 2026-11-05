@@ -59,7 +59,7 @@ describe("session folding and alerts", () => {
     expect(newAlerts(s, ev("view", { gate: 1 }))).toEqual([]);
   });
 
-  test("open fires once after human engagement; booking click is hot; 2 minutes is deep", () => {
+  test("open fires once after human engagement; clicks are recorded; 2 minutes is deep", () => {
     const s = newSession(ev("view"), "", {}, 0);
     applyEvent(s, ev("view", { ref: "https://mail.google.com/" }), 0);
     expect(newAlerts(s, ev("view"))).toEqual([]); // not yet human
@@ -69,7 +69,8 @@ describe("session folding and alerts", () => {
 
     const click = ev("click", { l: "Book a call", u: "https://calendly.com/acme/30min" });
     applyEvent(s, click, 2);
-    expect(newAlerts(s, click)).toEqual(["hot"]);
+    expect(newAlerts(s, click)).toEqual([]);
+    expect(s.clicks.at(-1)).toMatchObject({ label: "Book a call", href: "https://calendly.com/acme/30min" });
 
     for (let i = 0; i < 5; i++) applyEvent(s, ev("hb", { ms: 30_000, sc: 80 }), 3 + i);
     expect(s.engagedMs).toBe(150_000);

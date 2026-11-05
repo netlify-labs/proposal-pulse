@@ -10,7 +10,7 @@ Setting it up with an AI coding agent? Go to [Setup](#setup).
 - **Personal links:** add `?r=jane` to a link and every visit from that browser is labelled "jane", even if she comes back without the parameter.
 - **Forward detection:** a new browser opening the same project shows up as "new person opened".
 - **Password-protected projects:** visits to the Netlify password page are recorded separately, including wrong attempts.
-- **Slack alerts (optional):** first open, return visit, possible forward, booking-link click (Calendly, Google Calendar, Zoom, HubSpot meetings and more), and reads over 2 minutes.
+- **Slack alerts (optional):** first open, return visit, possible forward, and reads over 2 minutes.
 - **Hands-off enrollment:** a new project in your teams gets the tracker within seconds of being created, and existing projects on their next production deploy. Untrack a project once and it stays untracked.
 
 ## How it works
@@ -46,25 +46,6 @@ flowchart LR
   ui -- "read-only queries" --> db
   ui -- "track · untrack · forget (signed)" --> manage
   manage --> db
-```
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant N as Netlify
-  participant C as Collector
-  participant P as New project
-  participant V as Visitor
-  participant DB as Netlify Database
-  participant D as Dashboard
-  N->>C: site_created (signed with HOOK_SECRET)
-  C->>C: verify signature, check team is in PULSE_TEAMS
-  C->>P: add tracker snippet (live, no redeploy)
-  C->>DB: record project as tracked
-  V->>P: opens the shared link
-  P->>C: t.js beacons: view, read time, scroll, clicks
-  C->>DB: update the visit
-  D->>DB: read visits (read-only role)
 ```
 
 ### The two projects

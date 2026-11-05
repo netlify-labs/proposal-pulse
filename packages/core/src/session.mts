@@ -1,9 +1,5 @@
 import type { AlertType, BeaconEvent, Session } from "./types.mts";
 
-/** Links that signal buying intent: meeting schedulers, email and phone. */
-export const HOT_LINK =
-  /calendar\.app\.google|calendly\.com|cal\.com\/|meet\.google|zoom\.us\/|teams\.microsoft|hubspot\.com\/meetings|chili ?piper|savvycal|^mailto:|^tel:/i;
-
 /** Crawlers, link scanners and email security proxies that pre-open links. */
 export const BOT_UA =
   /bot|crawl|spider|slurp|preview|scan|headless|phantom|python|curl|wget|java\/|okhttp|go-http|axios|node-fetch|safelinks|proofpoint|mimecast|barracuda|cisco|fortinet|trendmicro|symantec|lighthouse|pagespeed|gtmetrix|monitor|uptime|facebookexternalhit|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|skypeuripreview|microsoft office|ms-office|google-read-aloud|googleother/i;
@@ -111,7 +107,7 @@ export function applyEvent(s: Session, ev: BeaconEvent, now: number): Session {
   if (typeof ev.sc === "number") s.maxScroll = Math.max(s.maxScroll, Math.min(100, Math.round(ev.sc)));
   if (ev.k === "click" && s.clicks.length < 60) {
     const href = clip(ev.u, 300);
-    s.clicks.push({ t: now, label: clip(ev.l, 80), href: href || undefined, hot: HOT_LINK.test(href) || undefined });
+    s.clicks.push({ t: now, label: clip(ev.l, 80), href: href || undefined });
   }
   if (ev.k === "section") {
     const l = clip(ev.l, 70);
@@ -130,10 +126,6 @@ export function applyEvent(s: Session, ev: BeaconEvent, now: number): Session {
 export function newAlerts(s: Session, ev: BeaconEvent): AlertType[] {
   const out: AlertType[] = [];
   if (s.human && s.unlocked && !s.alerts.includes("open")) out.push("open");
-  if (ev.k === "click") {
-    const c = s.clicks[s.clicks.length - 1];
-    if (c?.hot && !s.alerts.includes("hot")) out.push("hot");
-  }
   if (s.human && s.engagedMs >= DEEP_READ_MS && !s.alerts.includes("deep")) out.push("deep");
   s.alerts.push(...out);
   return out;
