@@ -156,7 +156,7 @@ td.tcell{width:84px;padding-right:0}
 (function(){
 "use strict";
 var LOGO='<svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#05BDBA" fill-opacity=".14"/><path d="M4 17h6l3-7 5 13 3-6h7" fill="none" stroke="#05BDBA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-var S={key:'open',days:+(ls('pp_days')||30),tab:ls('pp_tab')||'activity',data:null,status:null,sites:null,q:'',siteFilter:'tracked',siteQ:'',sel:{},creator:ls('pp_creator')||'',hotOnly:false};
+var S={key:'open',days:+(ls('pp_range')||2),tab:ls('pp_tab')||'activity',data:null,status:null,sites:null,q:'',siteFilter:'tracked',siteQ:'',sel:{},creator:ls('pp_creator')||'',hotOnly:false};
 function ss(k,v){try{if(v===undefined)return sessionStorage.getItem(k);if(v===null)sessionStorage.removeItem(k);else sessionStorage.setItem(k,v)}catch(e){return null}}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -243,7 +243,7 @@ function shell(){
   '</nav><div id="body"><div class="panel empty">Loading…</div></div><div style="height:40px"></div></main>';
 }
 function bindShell(){
-  $('days').onchange=function(){S.days=+this.value;ls('pp_days',String(S.days));S.data=null;load()};
+  $('days').onchange=function(){S.days=+this.value;ls('pp_range',String(S.days));S.data=null;load()};
   $('rf').onclick=function(){load(true)};
   document.querySelectorAll('nav.tabs button').forEach(function(b){b.onclick=function(){S.tab=b.dataset.tab;ls('pp_tab',S.tab);document.querySelectorAll('nav.tabs button').forEach(function(x){x.classList.toggle('on',x===b)});body()}});
 }
