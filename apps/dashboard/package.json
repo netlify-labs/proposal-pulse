@@ -2,26 +2,11 @@
   "name": "@proposal-pulse/dashboard",
   "private": true,
   "type": "module",
-  "scripts": {
-    "build": "vite build",
-    "typecheck": "tsc --noEmit -p ."
-  },
   "dependencies": {
-    "@mantine/core": "^9.7.5",
-    "@mantine/hooks": "^9.7.5",
-    "@mantine/modals": "^9.7.5",
-    "@mantine/notifications": "^9.7.5",
-    "@tabler/icons-react": "^3.50.0",
-    "pg": "^8.23.1",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "pg": "^8.23.1"
   },
   "devDependencies": {
     "@netlify/functions": "^6.1.0",
-    "@types/pg": "^8.23.1",
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^6.2.1",
-    "vite": "^8.3.5"
+    "@types/pg": "^8.23.1"
   }
 }
