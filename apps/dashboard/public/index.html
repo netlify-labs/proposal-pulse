@@ -53,7 +53,14 @@ nav.tabs button.on{color:var(--ink);border-color:var(--teal)}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
 .empty{padding:40px 20px;text-align:center;color:var(--muted)}
 .feed{display:flex;flex-direction:column}
-.item{display:grid;grid-template-columns:38px 1fr auto;gap:12px;padding:14px 16px;border-top:1px solid var(--line)}
+.item{display:grid;grid-template-columns:64px 1fr auto;gap:12px;padding:14px 16px;border-top:1px solid var(--line)}
+.item.nothumb{grid-template-columns:1fr auto}
+.item.dim{opacity:.72}
+.item .thumb{width:64px;height:40px}
+.item .t1 .site{font-size:14.5px;font-weight:700}
+.item .t1 .by{font-weight:500}
+.st{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-top:2px}
+.st.hot{color:var(--pink)}.st.open{color:var(--teal-ink)}.st.brief,.st.gate{color:var(--muted)}
 .item:first-child{border-top:0}
 .ico{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--soft);font-size:18px}
 .ico.gate{background:var(--chip)}
@@ -134,7 +141,7 @@ td.tcell{width:84px;padding-right:0}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--dark);color:#E7F2F0;padding:10px 16px;border-radius:10px;font-size:13px;z-index:40;display:none;max-width:90vw}
 .section-title{font:600 11px "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 8px}
 @media (max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}.kpis .kpi:last-child{grid-column:span 2}.setup-grid{grid-template-columns:1fr}.grid2{grid-template-columns:repeat(2,1fr)}.hide-sm{display:none}th,td{padding:10px}}
-@media (max-width:520px){.item{grid-template-columns:32px 1fr}.item .when{grid-column:2;text-align:left}.ico{width:32px;height:32px}.brand small{display:none}}
+@media (max-width:520px){.item{grid-template-columns:48px 1fr}.item.nothumb{grid-template-columns:1fr}.item .thumb{width:48px;height:30px}.item .when{grid-column:2;text-align:left}.ico{width:32px;height:32px}.brand small{display:none}}
 </style>
 </head>
 <body>
@@ -264,29 +271,34 @@ function body(){
 }
 
 function sessionCard(s,withSite){
+  // Layout B: thumbnail · title + creator · coloured status + badges · facts on one line
   var now=Date.now(),isLive=s.unlocked&&now-s.last<75000;
-  var icon='👀',cls='',title='Opened';
-  if(!s.unlocked){icon='🔒';cls='gate';title=s.wrongPw?'Tried the password':'Reached the password page'}
-  else if(s.engagedMs>=120000){icon='📖';title='Deep read'}
-  else if(!s.human){icon='·';cls='gate';title='Brief visit (no interaction)'}
-  var why=hotWhy(s);if(why.length){icon='🔥';title=why[0].charAt(0).toUpperCase()+why.join(' and ').slice(1)}
+  var cls='open',title='👀 Opened';
+  if(!s.unlocked){cls='gate';title='🔒 '+(s.wrongPw?'Tried the password':'Reached the password page')}
+  else if(!s.human){cls='brief';title='Brief visit, no interaction'}
+  else if(s.engagedMs>=120000){title='📖 Deep read'}
+  var why=hotWhy(s);if(why.length){cls='hot';title='🔥 '+why[0].charAt(0).toUpperCase()+why.join(' and ').slice(1)}
   var badges=[];
   if(isLive)badges.push('<span class="badge live">LIVE</span>');
   if(s.alerts&&s.alerts.indexOf('open')>-1){if(s.newVisitor&&s.visitorCount>1)badges.push('<span class="badge amber">new person · '+s.visitorCount+' total</span>');else if(s.visitNo>1)badges.push('<span class="badge teal">visit #'+s.visitNo+'</span>')}
   if(s.wrongPw)badges.push('<span class="badge pink">wrong password ×'+s.wrongPw+'</span>');
-  var where=[s.city,s.cc].filter(Boolean).join(', ')||'Unknown location';
-  var h='<div class="item"><div class="ico '+cls+'">'+icon+'</div><div><div class="t1">'+esc(title)+(withSite?' · <a class="site" href="#site='+encodeURIComponent(s.host)+'">'+esc(label(s.host))+'</a>'+(creatorOf(s.host)?' <span class="by">by '+esc(creatorOf(s.host))+'</span>':''):'')+' '+badges.join(' ')+'</div>'+
-  '<div class="t2"><span class="who">'+(s.r?esc(s.r):'Unknown recipient')+'</span> · '+esc(where)+' · '+esc(s.device+' · '+s.browser+'/'+s.os)+(s.ref?' · via '+esc(s.ref):'')+'</div>';
-  if(s.unlocked){
-    h+='<div class="meta"><span>Read <b>'+dur(s.engagedMs)+'</b></span><span>Scrolled <span class="bar"><i style="width:'+(s.maxScroll||0)+'%"></i></span> <b>'+(s.maxScroll||0)+'%</b></span><span>Clicks <b>'+(s.clicks||[]).length+'</b></span>'+(s.paths&&s.paths.length>1?'<span>Pages <b>'+s.paths.length+'</b></span>':'')+'</div>';
-    if((s.sections&&s.sections.length)||(s.clicks&&s.clicks.length)){
-      h+='<details class="more"><summary>Sections read &amp; clicks ›</summary>';
-      if(s.sections&&s.sections.length)h+='<div class="t3"><b>Read:</b> '+s.sections.map(esc).join(' → ')+'</div>';
-      if(s.clicks&&s.clicks.length)h+='<ul class="clicks">'+s.clicks.map(function(c){return '<li><b>'+esc(c.label||c.href||'(click)')+'</b>'+(c.href?' <span class="mono">'+esc(c.href.replace(/^https?:\/\//,'').slice(0,60))+'</span>':'')+' · '+new Date(c.t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'</li>'}).join('')+'</ul>';
-      h+='</details>';
-    }
+  var facts=[];
+  if(s.unlocked&&s.human){var n=clicksOf(s);facts.push(dur(s.engagedMs)+' read',(s.maxScroll||0)+'% scrolled',n+' click'+(n===1?'':'s'));if(s.paths&&s.paths.length>1)facts.push(s.paths.length+' pages')}
+  facts.push(s.r?'<span class="who">'+esc(s.r)+'</span>':'Unknown recipient',esc([s.city,s.cc].filter(Boolean).join(', ')||'Unknown location'),esc((s.device&&s.device!=='Desktop'?s.device+' · ':'')+s.browser+'/'+s.os));
+  if(s.ref)facts.push('via '+esc(s.ref));
+  var t=withSite?trackedByHost()[s.host]:null,thumb=t&&t.screenshotUrl,url=(t&&t.url)||('https://'+s.host),by=withSite?creatorOf(s.host):'';
+  var h='<div class="item'+(withSite?'':' nothumb')+(cls==='brief'?' dim':'')+'">'+
+    (withSite?'<a class="tlink" href="'+esc(url)+'" target="_blank" rel="noopener" title="Open '+esc(label(s.host))+'">'+(thumb?'<img class="thumb" loading="lazy" alt="" src="'+esc(thumb)+'">':'<span class="thumb"></span>')+'</a>':'')+
+    '<div>'+(withSite?'<div class="t1"><a class="site" href="#site='+encodeURIComponent(s.host)+'">'+esc(label(s.host))+'</a>'+(by?'<span class="by">by '+esc(by)+'</span>':'')+'</div>':'')+
+    '<div class="st '+cls+'">'+esc(title)+badges.join(' ')+'</div>'+
+    '<div class="t2">'+facts.join(' · ')+'</div>';
+  if(s.unlocked&&((s.sections&&s.sections.length)||(s.clicks&&s.clicks.length))){
+    h+='<details class="more"><summary>Sections read &amp; clicks ›</summary>';
+    if(s.sections&&s.sections.length)h+='<div class="t3"><b>Read:</b> '+s.sections.map(esc).join(' → ')+'</div>';
+    if(s.clicks&&s.clicks.length)h+='<ul class="clicks">'+s.clicks.map(function(c){return '<li><b>'+esc(c.label||c.href||'(click)')+'</b>'+(c.href?' <span class="mono">'+esc(c.href.replace(/^https?:\/\//,'').slice(0,60))+'</span>':'')+' · '+new Date(c.t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'</li>'}).join('')+'</ul>';
+    h+='</details>';
   }
-  h+='</div><div class="when" title="'+esc(stamp(s.start))+'">'+ago(s.last)+'<br><span class="hide-sm">'+new Date(s.start).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'</span></div></div>';
+  h+='</div><div class="when" title="'+esc(stamp(s.start))+'">'+ago(s.last)+'</div></div>';
   return h;
 }
 function activity(b){
