@@ -253,6 +253,8 @@ done
 
 Done when: both calls return JSON with an `id`. A `404` means the token does not belong to an Organization Owner of `ORG_ID`.
 
+The subscriptions belong to the organization, not to the token, so the Organization Owner can revoke their token once both calls succeed. Proposal Pulse never needs it again.
+
 ### Part 5: Verify and finish
 
 **Step 11. Prove it end to end**
@@ -358,6 +360,7 @@ Netlify Functions read environment variables at deploy time: redeploy a project 
 - **Pause Slack alerts:** set `SLACK_ALERTS=off` on the collector and redeploy. Alerts that would have fired meanwhile are marked as sent, so resuming does not flood the channel.
 - **Webhook health:** **Setup > Org webhook** shows the last delivery and per-outcome counts for 24 hours. Every org event is logged, including other teams' (`ignored`).
 - **Rotate the database credentials:** repeat step 7 and redeploy the dashboard.
+- **Keep `HOOK_SECRET` unchanged.** The org webhooks sign every delivery with it. If you change it on the projects, an Organization Owner must run step 10 again with the new value, or the collector rejects every delivery as a bad signature.
 - **Schema changes:** add a new timestamped `.sql` file under `apps/collector/netlify/database/migrations` and deploy the collector. Keep migrations additive (new tables, nullable columns), since the dashboard reads the same database and may deploy separately. Never edit or delete an applied migration.
 - **Collector deploy previews** get their own database branch copied from production, including visitor data. Keep those preview links private.
 
