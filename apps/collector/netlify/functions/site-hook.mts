@@ -6,9 +6,9 @@ import {
   getSiteRecord,
   hostOf,
   isSiteId,
+  ownUrl,
   pulseTeams,
   readOrgHook,
-  stripSlash,
   trackSite,
   upsertSite,
   verifyNetlifySignature,
@@ -90,14 +90,13 @@ async function handle(hook: { siteId: string; name: string; team: string }, cont
   }
 
   // Never inject into Proposal Pulse itself.
-  const own = [context.site?.id, env("DASHBOARD_SITE_ID")].filter(Boolean);
-  const ownHosts = [hostOf(context.site?.url || ""), hostOf(env("DASHBOARD_URL"))].filter(Boolean);
-  if (own.includes(site.id) || ownHosts.includes(site.host)) {
+  const collectorUrl = ownUrl() || context.site?.url || "";
+  const ownHosts = [hostOf(collectorUrl), hostOf(env("DASHBOARD_URL"))].filter(Boolean);
+  if (site.id === context.site?.id || site.hosts.some((h) => ownHosts.includes(h))) {
     await upsertSite(db, site, "ignored");
     return ["ignored", "Proposal Pulse project"];
   }
 
-  const collectorUrl = stripSlash(env("COLLECTOR_URL") || context.site?.url || "");
   await trackSite(db, site, collectorUrl, "webhook");
   return ["tracked", site.name];
 }

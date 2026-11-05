@@ -1,42 +1,30 @@
 import type { Config } from "@netlify/functions";
-import {
-  ORG_HOOK_EVENTS,
-  authed,
-  createOrgHook,
-  env,
-  forgetSite,
-  getMe,
-  json,
-  listSiteRecords,
-  postSlack,
-  pulseTeams,
-  slackMode,
-  stripSlash,
-  testAlert,
-  untrackSite,
-} from "../../../../packages/core/src/index.mts";
+import { authed, env, json, listSiteRecords, signManageRequest, stripSlash, type ManageRequest } from "../../../../packages/core/src/index.mts";
 import { db } from "../../lib/db.mts";
 
-/** Setup and admin operations for the dashboard: GET/POST /api/admin?op=... */
+/**
+ * Setup and admin operations for the dashboard: GET/POST /api/admin?op=...
+ * Reads come straight from the database (read-only role). Changes (untrack, forget) and the
+ * collector's own health are requested from the collector with a request signed by HOOK_SECRET.
+ */
+async function collector(req: Omit<ManageRequest, "ts">) {
+  const base = stripSlash(env("COLLECTOR_URL"));
+  const secret = env("HOOK_SECRET");
+  if (!base || !secret) throw new Error("COLLECTOR_URL and HOOK_SECRET must be set on the dashboard");
+  const { body, signature } = signManageRequest(req, secret);
+  const res = await fetch(`${base}/api/manage`, { method: "POST", headers: { "content-type": "application/json", "x-pulse-signature": signature }, body });
+  const out = await res.json().catch(() => ({ error: `collector returned ${res.status}` }));
+  if (!res.ok) throw new Error(out.error || `collector returned ${res.status}`);
+  return out;
+}
+
 export default async (req: Request) => {
   if (!authed(req)) return json({ error: "unauthorized" }, 401);
-  const url = new URL(req.url);
-  const op = url.searchParams.get("op") || "status";
-  const dashboard = stripSlash(env("DASHBOARD_URL") || url.origin);
-  const collector = stripSlash(env("COLLECTOR_URL"));
+  const op = new URL(req.url).searchParams.get("op") || "status";
   const post = req.method === "POST";
 
   try {
     if (op === "status") {
-      let me = null;
-      let tokenError = "";
-      if (env("NETLIFY_TOKEN")) {
-        try {
-          me = await getMe();
-        } catch (e: any) {
-          tokenError = String(e?.message || e);
-        }
-      }
       let dbError = "";
       let counts: Record<string, number> = {};
       try {
@@ -45,18 +33,25 @@ export default async (req: Request) => {
       } catch (e: any) {
         dbError = String(e?.message || e);
       }
+      let col: any = null;
+      let collectorError = "";
+      try {
+        col = await collector({ op: "status" });
+      } catch (e: any) {
+        collectorError = String(e?.message || e);
+      }
       return json({
-        dashboard,
-        collector,
-        teams: pulseTeams(),
-        slack: slackMode(),
-        token: !!env("NETLIFY_TOKEN"),
-        tokenError,
-        me: me && { name: me.full_name, email: me.email },
         db: !dbError,
         dbError,
         trackedCount: counts.tracked || 0,
         excludedCount: counts.excluded || 0,
+        collectorUrl: stripSlash(env("COLLECTOR_URL")),
+        collector: !collectorError,
+        collectorError,
+        me: col?.me || null,
+        tokenError: col?.tokenError || "",
+        teams: col?.teams || [],
+        slack: col?.slack || "none",
       });
     }
 
@@ -67,64 +62,29 @@ export default async (req: Request) => {
     }
 
     if (op === "hook-status") {
-      const [recent, summary, subs] = await Promise.all([
+      const [recent, summary] = await Promise.all([
         db().query("SELECT received_at, event, site_id, site_name, team, outcome, detail FROM hook_events ORDER BY received_at DESC LIMIT 25"),
         db().query<{ outcome: string; n: number }>(
           "SELECT outcome, count(*)::int AS n FROM hook_events WHERE received_at > now() - interval '24 hours' GROUP BY outcome",
         ),
-        db().query("SELECT value FROM settings WHERE key = 'org_hooks'"),
       ]);
       return json({
-        secret: !!env("HOOK_SECRET"),
-        endpoint: collector ? `${collector}/hooks/netlify-site` : "",
         recent: recent.rows.map((r: any) => ({ ...r, at: new Date(r.received_at).getTime() })),
         last24h: Object.fromEntries(summary.rows.map((r) => [r.outcome, r.n])),
-        subs: subs.rows[0]?.value || null,
       });
     }
 
-    if (op === "hook-subscribe" && post) {
-      const { orgId } = (await req.json()) as { orgId?: string };
-      if (!/^[A-Za-z0-9_-]{6,64}$/.test(orgId || "")) return json({ error: "Enter a valid organization ID" }, 400);
-      const secret = env("HOOK_SECRET");
-      if (!secret || !collector) return json({ error: "HOOK_SECRET and COLLECTOR_URL must be set on the dashboard" }, 500);
-      // Org webhooks need an Organization Owner's token; use it if one was provided for this step.
-      const tokenVar = env("NETLIFY_ORG_OWNER_TOKEN") ? "NETLIFY_ORG_OWNER_TOKEN" : "NETLIFY_TOKEN";
-      const results = [];
-      for (const event of ORG_HOOK_EVENTS) {
-        try {
-          const r = await createOrgHook(orgId!, event, `${collector}/hooks/netlify-site`, secret, tokenVar);
-          results.push({ event, ok: true, id: r?.id, via: tokenVar });
-        } catch (e: any) {
-          results.push({ event, ok: false, via: tokenVar, error: String(e?.message || e).replaceAll(secret, "***") });
-        }
-      }
-      if (results.some((r) => r.ok)) {
-        await db().query(
-          `INSERT INTO settings (key, value, updated_at) VALUES ('org_hooks', $1, now())
-           ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()`,
-          [JSON.stringify({ orgId, at: Date.now(), results })],
-        );
-      }
-      return json({ results });
+    if (op === "track" && post) {
+      const { refs } = (await req.json()) as { refs?: string[] };
+      const list = (refs || []).map((r) => String(r).trim()).filter(Boolean);
+      if (!list.length) return json({ error: "Enter a project name or URL" }, 400);
+      return json(await collector({ op: "track", refs: list.slice(0, 50) }));
     }
-
-    if (op === "test-alert" && post) return json(await postSlack(testAlert(dashboard)));
 
     if ((op === "untrack" || op === "forget") && post) {
       const { ids } = (await req.json()) as { ids?: string[] };
       if (!Array.isArray(ids) || !ids.length) return json({ error: "no ids" }, 400);
-      const results = [];
-      for (const id of ids.slice(0, 200)) {
-        try {
-          if (op === "untrack") await untrackSite(db(), id);
-          else await forgetSite(db(), id);
-          results.push({ id, ok: true });
-        } catch (e: any) {
-          results.push({ id, ok: false, error: String(e?.message || e) });
-        }
-      }
-      return json({ results });
+      return json(await collector({ op, ids: ids.slice(0, 200) }));
     }
 
     return json({ error: "unknown op" }, 400);
