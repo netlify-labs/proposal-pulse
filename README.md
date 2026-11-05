@@ -13,7 +13,7 @@ Setting it up with an AI coding agent? Go to [Setup](#setup).
 - **Personal links:** add `?r=jane` to a link and every visit from that browser is labelled "jane", even if she comes back without the parameter.
 - **Forward detection:** a new browser opening the same project shows up as "new person opened".
 - **Password-protected projects:** visits to the Netlify password page are recorded separately, including wrong attempts.
-- **Slack alerts (optional):** first open, return visit, possible forward, and reads over 2 minutes.
+- **Slack alerts (optional):** first open, return visit, possible forward, 🔥 read to the end and clicked, and reads over 2 minutes.
 - **Hands-off enrollment:** a new project in your teams gets the tracker within seconds of being created, and existing projects on their next production deploy. Untrack a project once and it stays untracked.
 
 ## How it works
@@ -302,9 +302,17 @@ Use the base directory, not the package directory: each app's `netlify.toml` res
 Optional. The collector posts to one Slack channel when a tracked proposal is:
 
 - **opened** for the first time (with "Back again" for a return visit, and "New person opened" when a different browser opens it, a likely forward);
+- **read to the end and clicked** (🔥, the same rule as the dashboard's hot visits);
 - **read for 2+ minutes**.
 
-Each alert fires at most once per visit and links to the proposal and to its page in the dashboard. Proposal Pulse accepts either kind of Slack webhook and detects which one from the URL.
+Each alert fires at most once per visit and is two short lines: the proposal, who created it and what happened, then the recipient (from a personal link), place and details, with a link to the proposal's page in the dashboard:
+
+```
+🔥 *acme-proposal* · by Jane Doe · read to the end and clicked
+London, GB · 3m 16s · 31 clicks → https://<dashboard>/#site=acme-proposal.netlify.app
+```
+
+Alerts link to the dashboard rather than the proposal, so Slack doesn't expand proposal previews in the channel. Proposal Pulse accepts either kind of Slack webhook and detects which one from the URL.
 
 | | Workflow Builder webhook | Incoming Webhook (Slack app) |
 |---|---|---|

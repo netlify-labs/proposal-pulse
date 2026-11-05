@@ -43,7 +43,7 @@ export type Session = {
   title: string;
 };
 
-export type AlertType = "open" | "deep";
+export type AlertType = "open" | "hot" | "deep";
 
 /** Beacon sent by t.js. Short keys keep the payload small. */
 export type BeaconEvent = {

@@ -2,11 +2,13 @@ import type { Config, Context } from "@netlify/functions";
 import {
   BOT_UA,
   deepAlert,
+  hotAlert,
   env,
   isValidEvent,
   openAlert,
   postSlack,
   trackedSiteForHost,
+  type AlertSite,
   type AlertType,
   type BeaconEvent,
   type Session,
@@ -52,7 +54,7 @@ export default async (req: Request, context: Context) => {
   };
   try {
     const { session, pending } = await recordBeacon(pool as unknown as Pool, ev, ua, geo, Date.now());
-    if (pending.length) context.waitUntil(sendAlerts(session, pending).catch((e) => console.error("alert failed", e)));
+    if (pending.length) context.waitUntil(sendAlerts(session, pending, site).catch((e) => console.error("alert failed", e)));
   } catch (e) {
     console.error("collect failed", e);
     return done(500);
@@ -60,12 +62,12 @@ export default async (req: Request, context: Context) => {
   return done();
 };
 
-async function sendAlerts(s: Session, types: AlertType[]) {
+async function sendAlerts(s: Session, types: AlertType[], site: AlertSite) {
   const dashboard = env("DASHBOARD_URL");
   for (const type of types) {
     if (!(await claimAlert(db, s.sid, type))) continue;
     const text =
-      type === "open" ? openAlert(s, dashboard) : deepAlert(s, dashboard);
+      type === "open" ? openAlert(s, dashboard, site) : type === "hot" ? hotAlert(s, dashboard, site) : deepAlert(s, dashboard, site);
     await postSlack(text);
   }
 }

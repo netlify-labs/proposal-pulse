@@ -131,6 +131,8 @@ export function applyEvent(s: Session, ev: BeaconEvent, now: number): Session {
 export function newAlerts(s: Session, ev: BeaconEvent): AlertType[] {
   const out: AlertType[] = [];
   if (s.human && s.unlocked && !s.alerts.includes("open")) out.push("open");
+  // 🔥 read to the end and clicked (same rule as the dashboard's hot visits)
+  if (s.human && s.maxScroll >= 90 && s.clicks.length && !s.alerts.includes("hot")) out.push("hot");
   if (s.human && s.engagedMs >= DEEP_READ_MS && !s.alerts.includes("deep")) out.push("deep");
   s.alerts.push(...out);
   return out;
