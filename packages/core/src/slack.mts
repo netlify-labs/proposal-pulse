@@ -67,12 +67,6 @@ export function openAlert(s: Session, dashboardUrl: string) {
   return `${headline}\nWho: ${who(s)} · ${where(s)} · ${device(s)}\n${context}${ref}${dash}`;
 }
 
-export function hotAlert(s: Session, label: string, href: string, dashboardUrl: string) {
-  const { site, dash } = links(s, dashboardUrl);
-  const kind = /^mailto:/i.test(href) ? "Clicked your email link" : /^tel:/i.test(href) ? "Clicked your phone link" : "Clicked your booking link";
-  return `:fire: *${kind}*: ${site}\nWho: ${who(s)} · ${where(s)} · ${device(s)}\nClicked "${label || href}" after ${fmtDur(s.engagedMs)} on the page${dash}`;
-}
-
 export function deepAlert(s: Session, dashboardUrl: string) {
   const { site, dash } = links(s, dashboardUrl);
   const secs = s.sections.length ? `\nRead: ${s.sections.slice(0, 8).join(" → ")}` : "";
@@ -80,5 +74,5 @@ export function deepAlert(s: Session, dashboardUrl: string) {
 }
 
 export function testAlert(dashboardUrl: string) {
-  return `:white_check_mark: *Proposal Pulse is connected*\nAlerts for tracked projects land here: opens, return visits, forwards, booking-link clicks and deep reads.\n<${stripSlash(dashboardUrl)}|Open the dashboard>`;
+  return `:white_check_mark: *Proposal Pulse is connected*\nAlerts for tracked projects land here: opens, return visits, forwards and deep reads.\n<${stripSlash(dashboardUrl)}|Open the dashboard>`;
 }

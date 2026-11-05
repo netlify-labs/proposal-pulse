@@ -3,7 +3,6 @@ import {
   BOT_UA,
   deepAlert,
   env,
-  hotAlert,
   isValidEvent,
   openAlert,
   postSlack,
@@ -56,11 +55,10 @@ export default async (req: Request, context: Context) => {
 
 async function sendAlerts(s: Session, types: AlertType[]) {
   const dashboard = env("DASHBOARD_URL");
-  const click = s.clicks[s.clicks.length - 1];
   for (const type of types) {
     if (!(await claimAlert(db, s.sid, type))) continue;
     const text =
-      type === "open" ? openAlert(s, dashboard) : type === "hot" ? hotAlert(s, click?.label || "", click?.href || "", dashboard) : deepAlert(s, dashboard);
+      type === "open" ? openAlert(s, dashboard) : deepAlert(s, dashboard);
     await postSlack(text);
   }
 }
