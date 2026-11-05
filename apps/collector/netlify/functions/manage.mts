@@ -1,5 +1,6 @@
 import type { Config, Context } from "@netlify/functions";
 import {
+  deleteVisits,
   env,
   forgetSite,
   getMe,
@@ -57,6 +58,11 @@ export default async (req: Request, context: Context) => {
         .slice(0, 2000)
         .map((s) => ({ id: s.id, name: s.name, team: s.team, url: s.url, createdAt: s.createdAt, publishedAt: s.publishedAt, status: status.get(s.id) === "excluded" ? "excluded" : "new" }));
       return json({ sites });
+    }
+
+    if (r.op === "delete-visits") {
+      const sids = (r.ids || []).filter((x) => /^[a-z0-9]{8,32}$/.test(x)).slice(0, 500);
+      return json({ deleted: await deleteVisits(db, sids) });
     }
 
     if (r.op === "track") {

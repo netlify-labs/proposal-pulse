@@ -94,3 +94,21 @@ export async function forgetSite(db: Db, id: string) {
   }
   await db.query("DELETE FROM sites WHERE id = $1", [id]);
 }
+
+/**
+ * Delete individual visits (e.g. your own test visits), their alert markers, and any visitor
+ * record left with no visits, so return-visit and forward counts stay accurate.
+ */
+export async function deleteVisits(db: Db, sids: string[]) {
+  if (!sids.length) return 0;
+  const { rows } = await db.query<{ host: string; vid: string }>("SELECT DISTINCT host, vid FROM sessions WHERE sid = ANY($1)", [sids]);
+  await db.query("DELETE FROM alerts WHERE sid = ANY($1)", [sids]);
+  const { rowCount } = await db.query("DELETE FROM sessions WHERE sid = ANY($1)", [sids]);
+  for (const v of rows) {
+    await db.query(
+      "DELETE FROM visitors WHERE host = $1 AND vid = $2 AND NOT EXISTS (SELECT 1 FROM sessions WHERE host = $1 AND vid = $2)",
+      [v.host, v.vid],
+    );
+  }
+  return rowCount || 0;
+}
