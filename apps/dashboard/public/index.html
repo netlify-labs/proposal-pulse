@@ -222,7 +222,7 @@ function shell(){
   '<span class="live hide-sm"><span class="dot"></span><span id="upd">live</span></span>'+
   '<select class="hbtn" id="days" aria-label="Date range">'+[7,30,90,180].map(function(d){return '<option value="'+d+'"'+(d===S.days?' selected':'')+'>Last '+d+' days</option>'}).join('')+'</select>'+
   '<button class="hbtn" id="rf" title="Refresh">Refresh</button></div></header>'+
-  '<main class="wrap"><div id="kpis"></div><div id="vmapAll"></div><nav class="tabs">'+
+  '<main class="wrap"><div id="kpis"></div><nav class="tabs">'+
   [['activity','Activity'],['proposals','Proposals'],['links','Link builder'],['setup','Setup']].map(function(t){return '<button data-tab="'+t[0]+'" class="'+(S.tab===t[0]?'on':'')+'">'+t[1]+'</button>'}).join('')+
   '</nav><div id="body"><div class="panel empty">Loading…</div></div><div style="height:40px"></div></main>';
 }
@@ -247,7 +247,6 @@ function kpis(){
    k('Clicks',human.reduce(function(a,s){return a+clicksOf(s)},0),'links and buttons')+
    k('Avg read',dur(avg),human.length+' visits')+'</div>';
   function k(l,v,s,c){return '<div class="kpi '+(c||'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>'}
-  if($('vmapAll'))$('vmapAll').innerHTML=visitMap(S.data.sessions.filter(function(s){return s.unlocked||s.gate}),{aspect:4.4,px:1150,sites:1,title:'All visitors · last '+S.days+' days'});
 }
 function body(){
   var b=$('body');b.dataset.ready='1';
@@ -287,8 +286,9 @@ function activity(b){
   var list=S.data.sessions.filter(function(s){return s.unlocked||s.gate});
   var vis=list; // every visit, including brief ones (no interaction)
   b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="aq" placeholder="Filter by site or recipient" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+creatorSelect('acr')+
-  '</div><div class="feed" id="feed"></div></div>';
-  function draw(){var q=S.q.toLowerCase();var f=vis.filter(function(s){return (!q||s.host.indexOf(q)>-1||(s.r||'').toLowerCase().indexOf(q)>-1)&&(!S.creator||creatorOf(s.host)===S.creator)}).slice(0,200);
+  '</div><div id="amap" style="padding:0 14px"></div><div class="feed" id="feed"></div></div>';
+  function draw(){var q=S.q.toLowerCase();var all=vis.filter(function(s){return (!q||s.host.indexOf(q)>-1||(s.r||'').toLowerCase().indexOf(q)>-1)&&(!S.creator||creatorOf(s.host)===S.creator)}),f=all.slice(0,200);
+    $('amap').innerHTML=visitMap(all,{aspect:3.6,px:1100,sites:1,title:'Visitors · last '+S.days+' days'});
     $('feed').innerHTML=f.length?f.map(function(s){return sessionCard(s,true)}).join(''):'<div class="empty">'+(S.data.sessions.length?'No matching activity.':'No activity yet. Once the tracker is on your sites, opens will show up here within seconds.')+'</div>'}
   draw();
   $('aq').oninput=function(){S.q=this.value;draw()};
