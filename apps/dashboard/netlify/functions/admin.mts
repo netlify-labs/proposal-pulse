@@ -83,6 +83,12 @@ export default async (req: Request) => {
       return json(await collector({ op: "track", refs: list.slice(0, 50) }));
     }
 
+    if (op === "delete-visits" && post) {
+      const { ids } = (await req.json()) as { ids?: string[] };
+      if (!Array.isArray(ids) || !ids.length) return json({ error: "no visits" }, 400);
+      return json(await collector({ op: "delete-visits", ids: ids.slice(0, 500) }));
+    }
+
     if ((op === "untrack" || op === "forget") && post) {
       const { ids } = (await req.json()) as { ids?: string[] };
       if (!Array.isArray(ids) || !ids.length) return json({ error: "no ids" }, 400);

@@ -2,7 +2,7 @@ import { NetlifyDB } from "@netlify/database-dev";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { claimAlert, recordBeacon, type Pool } from "../apps/collector/lib/visits.mts";
-import { forgetSite, getSiteRecord, listSiteRecords, trackedSiteForHost, upsertSite, type BeaconEvent, type Db } from "../packages/core/src/index.mts";
+import { deleteVisits, forgetSite, getSiteRecord, listSiteRecords, trackedSiteForHost, upsertSite, type BeaconEvent, type Db } from "../packages/core/src/index.mts";
 
 /**
  * Applies the real migrations and runs the apps' real queries.
@@ -127,6 +127,22 @@ describe("beacons", () => {
   test("each alert is claimed once", async () => {
     expect(await claimAlert(db, "lz0abc12xyz", "open")).toBe(true);
     expect(await claimAlert(db, "lz0abc12xyz", "open")).toBe(false);
+  });
+});
+
+describe("delete visits", () => {
+  test("removes the visit, its alerts, and a visitor left with no visits", async () => {
+    const p = pool as unknown as Pool;
+    const sid = "lz0delete01";
+    await recordBeacon(p, beacon("view", { sid, vid: "lz0delvis01" }), "", {}, 30_000);
+    await recordBeacon(p, beacon("interact", { sid, vid: "lz0delvis01" }), "", {}, 31_000);
+    await claimAlert(db, sid, "open");
+    expect(await deleteVisits(db, [sid])).toBe(1);
+    const left = await pool.query(
+      "SELECT (SELECT count(*) FROM sessions WHERE sid = $1)::int s, (SELECT count(*) FROM alerts WHERE sid = $1)::int a, (SELECT count(*) FROM visitors WHERE vid = 'lz0delvis01')::int v",
+      [sid],
+    );
+    expect(left.rows[0]).toEqual({ s: 0, a: 0, v: 0 });
   });
 });
 

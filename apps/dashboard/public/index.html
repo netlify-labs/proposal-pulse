@@ -59,6 +59,7 @@ nav.tabs button.on{color:var(--ink);border-color:var(--teal)}
 .item .thumb{width:64px;height:40px}
 .item .t1 .site{font-size:14.5px;font-weight:700}
 .item .t1 .by{font-weight:500}
+.delv{font:500 11px Inter,system-ui,sans-serif;color:var(--muted);text-decoration:none;opacity:.7}.delv:hover{color:var(--pink);opacity:1}
 .st{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:13px;font-weight:600;margin-top:2px}
 .st.hot{color:var(--pink)}.st.open{color:var(--teal-ink)}.st.brief,.st.gate{color:var(--muted)}
 .item:first-child{border-top:0}
@@ -170,6 +171,7 @@ function logout(){location.reload()}
 
 // ---------- aggregation ----------
 function clicksOf(s){return (s.clicks||[]).length}
+function rangeLabel(d){return d===2?'48 hours':d+' days'}
 // ---------- visitor maps ----------
 // Dots for visits with coordinates (captured by the collector), grouped by place; zooms to fit.
 function visitMap(sessions,opt){
@@ -234,7 +236,7 @@ function bindLogin(){$('lf').onsubmit=function(e){e.preventDefault();S.key=$('lp
 function shell(){
   return '<header><div class="wrap"><div class="brand">'+LOGO+'<span>Proposal Pulse</span></div><div class="spacer"></div>'+
   '<span class="live hide-sm"><span class="dot"></span><span id="upd">live</span></span>'+
-  '<select class="hbtn" id="days" aria-label="Date range">'+[7,30,90,180].map(function(d){return '<option value="'+d+'"'+(d===S.days?' selected':'')+'>Last '+d+' days</option>'}).join('')+'</select>'+
+  '<select class="hbtn" id="days" aria-label="Date range">'+[2,7,30,90,180].map(function(d){return '<option value="'+d+'"'+(d===S.days?' selected':'')+'>Last '+rangeLabel(d)+'</option>'}).join('')+'</select>'+
   '<button class="hbtn" id="rf" title="Refresh">Refresh</button></div></header>'+
   '<main class="wrap"><div id="kpis"></div><nav class="tabs">'+
   [['activity','Activity'],['proposals','Proposals'],['links','Link builder'],['setup','Setup']].map(function(t){return '<button data-tab="'+t[0]+'" class="'+(S.tab===t[0]?'on':'')+'">'+t[1]+'</button>'}).join('')+
@@ -256,7 +258,7 @@ function kpis(){
   var avg=human.length?human.reduce(function(a,s){return a+s.engagedMs},0)/human.length:0;
   $('kpis').innerHTML='<div class="kpis">'+
    k('Tracked',(S.data.tracked||[]).length,'proposal sites')+
-   k('Opened',opened.length,'in last '+S.days+' days')+
+   k('Opened',opened.length,'in last '+rangeLabel(S.days))+
    k('Live now',live.length,live.length?esc(label(live[0].host)):'nobody right now')+
    k('Clicks',human.reduce(function(a,s){return a+clicksOf(s)},0),'links and buttons')+
    k('Avg read',dur(avg),human.length+' visits')+'</div>';
@@ -298,7 +300,7 @@ function sessionCard(s,withSite){
     if(s.clicks&&s.clicks.length)h+='<ul class="clicks">'+s.clicks.map(function(c){return '<li><b>'+esc(c.label||c.href||'(click)')+'</b>'+(c.href?' <span class="mono">'+esc(c.href.replace(/^https?:\/\//,'').slice(0,60))+'</span>':'')+' · '+new Date(c.t).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})+'</li>'}).join('')+'</ul>';
     h+='</details>';
   }
-  h+='</div><div class="when" title="'+esc(stamp(s.start))+'">'+ago(s.last)+'</div></div>';
+  h+='</div><div class="when" title="'+esc(stamp(s.start))+'">'+ago(s.last)+'<br><a href="#" class="delv" data-sid="'+esc(s.sid)+'" title="Delete this visit, e.g. your own test visit">Delete</a></div></div>';
   return h;
 }
 function activity(b){
@@ -307,7 +309,7 @@ function activity(b){
   b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="aq" placeholder="Filter by site or recipient" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+creatorSelect('acr')+
   '</div><div id="amap" style="padding:16px 14px 0"></div><div class="feed" id="feed"></div></div>';
   function draw(){var q=S.q.toLowerCase();var all=vis.filter(function(s){return (!q||s.host.indexOf(q)>-1||(s.r||'').toLowerCase().indexOf(q)>-1)&&(!S.creator||creatorOf(s.host)===S.creator)}),f=all.slice(0,200);
-    $('amap').innerHTML=visitMap(all,{aspect:3.6,px:1100,sites:1,title:'Visitors · last '+S.days+' days'});
+    $('amap').innerHTML=visitMap(all,{aspect:3.6,px:1100,sites:1,title:'Visitors · last '+rangeLabel(S.days)});
     $('feed').innerHTML=f.length?f.map(function(s){return sessionCard(s,true)}).join(''):'<div class="empty">'+(S.data.sessions.length?'No matching activity.':'No activity yet. Once the tracker is on your sites, opens will show up here within seconds.')+'</div>'}
   draw();
   $('aq').oninput=function(){S.q=this.value;draw()};
@@ -412,6 +414,9 @@ function drawSites(){
 }
 function btns(){var n=Object.keys(S.sel).filter(function(k){return S.sel[k]}).length;$('suntrack').disabled=!n;$('sforget').disabled=!n;$('stracksel').disabled=!n;$('stracksel').textContent=n?'Track '+n+' selected':'Track selected'}
 
+document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a.delv');if(!a)return;e.preventDefault();
+  if(!confirm('Delete this visit? Use this for your own or test visits. It cannot be undone.'))return;
+  api('/api/admin?op=delete-visits',{method:'POST',body:JSON.stringify({ids:[a.dataset.sid]})}).then(function(r){toast(r.deleted?'Visit deleted':'Visit was already gone');var it=a.closest('.item');if(it)it.remove();load()}).catch(function(e){toast(e.message)})});
 setInterval(function(){if(S.key&&document.visibilityState==='visible'&&S.tab!=='setup')load()},30000);
 render();
 })();

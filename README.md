@@ -353,6 +353,7 @@ Netlify Functions read environment variables at deploy time: redeploy a project 
 
 - **Track a project now:** dashboard **Setup > Projects > Untracked** lists every project in `PULSE_TEAMS` that isn't tracked, newest first: ones created before the org webhooks, ones deployed with Drop and never redeployed, and ones someone untracked. Select them and click **Track selected**, or enter a name or URL and click **Track**. Restoring an older deploy does not send `site_published`; a new production deploy or **Track** does.
 - **Stop tracking a project:** **Setup > Projects > Untrack**. The snippet is removed and later deploys leave it alone.
+- **Remove your own or test visits:** click **Delete** under the time on any visit in Activity or a proposal's slide-out. The visit, its alert markers and any visitor record left with no visits are removed.
 - **A tracked project was deleted:** select it and click **Forget**. Its visit data is removed too.
 - **Pause Slack alerts:** set `SLACK_ALERTS=off` on the collector and redeploy. Alerts that would have fired meanwhile are marked as sent, so resuming does not flood the channel.
 - **Webhook health:** **Setup > Org webhook** shows the last delivery and per-outcome counts for 24 hours. Every org event is logged, including other teams' (`ignored`).
