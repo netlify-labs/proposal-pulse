@@ -1,0 +1,23 @@
+{
+  "name": "proposal-pulse",
+  "private": true,
+  "type": "module",
+  "description": "See who opens the sites you share, what they read, and when to follow up. Built on Netlify organization webhooks, Snippet Injection and Netlify Database.",
+  "workspaces": [
+    "apps/collector",
+    "apps/dashboard"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@netlify/database-dev": "^1.0.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=20.12.2"
+  }
+}

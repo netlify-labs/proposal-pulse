@@ -1,0 +1,12 @@
+{
+  "name": "@proposal-pulse/dashboard",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^6.1.0",
+    "@types/pg": "^8.23.1"
+  }
+}

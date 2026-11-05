@@ -1,0 +1,19 @@
+# Proposal Pulse dashboard: protect this project with Netlify team login (Site protection).
+# Reads the collector's Netlify Database through PULSE_DATABASE_URL.
+
+[build]
+  publish = "public"
+  functions = "netlify/functions"
+
+[functions]
+  # pg optionally requires a native binding that is never used here
+  external_node_modules = ["pg-native"]
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "no-referrer"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"

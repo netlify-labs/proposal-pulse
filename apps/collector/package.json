@@ -1,0 +1,11 @@
+{
+  "name": "@proposal-pulse/collector",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@netlify/database": "^2.0.1"
+  },
+  "devDependencies": {
+    "@netlify/functions": "^6.1.0"
+  }
+}
