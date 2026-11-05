@@ -277,7 +277,7 @@ Set the base directory, not the package directory: each app's `netlify.toml` res
 ## Operating it
 
 - **Pause Slack alerts:** set `SLACK_ALERTS=off` on the collector and redeploy. Alerts that would have fired meanwhile are marked as sent, so turning alerts back on does not flood the channel.
-- **Track a project now:** dashboard **Setup > Projects**, enter its name or URL and click **Track**. Use it for an existing project you are about to share, or to turn tracking back on after an untrack.
+- **Track a project now:** dashboard **Setup > Projects**, enter its name or URL and click **Track**. Use it for an existing project you are about to share, or to turn tracking back on after an untrack. Restoring an older deploy does not send `site_published`, so it does not enroll a project; a new production deploy or Track does.
 - **Stop tracking a project:** dashboard **Setup > Projects > Untrack**. The snippet is removed and later deploys leave it alone.
 - **A tracked project was deleted:** select it and click **Forget**.
 - **Rotate the database credentials:** repeat the connection-string part of step 7 and redeploy the dashboard.
@@ -294,6 +294,8 @@ npm test                                       # unit tests + schema tests on a 
 TEST_DATABASE_URL=postgres://... npm test      # also runs the concurrency test against a real, empty Postgres
 ```
 
+CI (`.github/workflows/test.yml`) runs both against a Postgres service container on every pull request.
+
 ```
 apps/
   collector/   public project: t.js, /api/t beacons, /hooks/netlify-site, daily cleanup, database migrations
@@ -302,3 +304,7 @@ packages/
   core/        shared code used by both apps
 test/          unit and schema tests
 ```
+
+## License
+
+MIT. Use it, change it, ship it. See [LICENSE](LICENSE).
