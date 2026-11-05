@@ -105,9 +105,16 @@ input:focus,select.in:focus{outline:2px solid var(--teal);outline-offset:-1px}
 .drawer-bg{position:fixed;inset:0;background:rgba(4,33,31,.45);display:none;z-index:20}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(640px,100%);background:var(--bg);z-index:21;transform:translateX(100%);transition:transform .2s ease;overflow-y:auto}
 .drawer.on{transform:none;box-shadow:-10px 0 40px rgba(0,0,0,.2)}.drawer-bg.on{display:block}
-.drawer .hd{position:sticky;top:0;background:var(--dark);color:#E7F2F0;padding:16px;display:flex;gap:10px;align-items:center}
+.drawer .hd{position:sticky;top:0;z-index:3;background:var(--dark);color:#E7F2F0;padding:12px 14px;display:flex;gap:10px;align-items:center}
+.drawer .hd .thumb{width:48px;height:30px;border-color:rgba(255,255,255,.15);flex:none}
+.drawer .hd .sub{font-size:12px;color:#9fb8b5;margin-top:1px}
+.drawer .vmap{margin-bottom:10px}
+.dstats{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--muted);margin:2px 2px 0}.dstats b{color:var(--ink);font-size:15px;margin-right:2px}
+.drawer .section-title{margin:14px 0 6px}
+.drawer .item{padding:10px 12px;gap:10px}
+.secrow{display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:13px;padding:3px 0}.secrow i{grid-column:1/-1;display:block;height:4px;border-radius:3px;background:var(--teal);opacity:.5}
 .drawer .hd h3{margin:0;font-size:16px;flex:1;word-break:break-all}
-.drawer .bd{padding:16px}
+.drawer .bd{padding:14px}
 .grid2{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
 .grid2 .kpi{padding:10px 12px}.grid2 .kpi .v{font-size:20px}
 .login{max-width:380px;margin:12vh auto;padding:28px}
@@ -333,15 +340,16 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDrawer(
 function drawer(host){
   var x=bySite().filter(function(s){return s.host===host})[0];
   var d=$('drawer');
-  if(!x){x={host:host,name:label(host),url:'https://'+host,sessions:[],people:0,visits:0,engaged:0,maxScroll:0,clicks:0,recips:{}}}
+  if(!x){x={host:host,name:label(host),url:'https://'+host,sessions:[],people:0,visits:0,engaged:0,maxScroll:0,clicks:0,hot:[],recips:{}}}
   var secCount={};x.sessions.forEach(function(s){(s.sections||[]).forEach(function(l){secCount[l]=(secCount[l]||0)+1})});
-  var secs=Object.keys(secCount).sort(function(a,b){return secCount[b]-secCount[a]});
-  d.innerHTML='<div class="hd"><h3>'+esc(label(host))+'</h3><a class="hbtn" href="https://'+esc(host)+'" target="_blank" rel="noopener">Open site ↗</a><button class="hbtn" id="dx" aria-label="Close">✕</button></div><div class="bd">'+
-  visitMap(x.sessions.filter(function(s){return s.unlocked||s.gate}),{aspect:2.2,px:520})+
-  '<div class="grid2"><div class="kpi"><div class="l">People</div><div class="v">'+x.people+'</div></div><div class="kpi"><div class="l">Visits</div><div class="v">'+x.visits+'</div></div><div class="kpi"><div class="l">Read time</div><div class="v">'+dur(x.engaged)+'</div></div><div class="kpi"><div class="l">Clicks</div><div class="v">'+x.clicks+'</div></div></div>'+
-  (secs.length?'<div class="section-title">Most-read sections</div><div class="panel" style="padding:10px 14px">'+secs.slice(0,12).map(function(l){return '<div style="display:flex;justify-content:space-between;gap:10px;padding:3px 0"><span>'+esc(l)+'</span><span class="mono hint">'+secCount[l]+'×</span></div>'}).join('')+'</div>':'')+
+  var secs=Object.keys(secCount).sort(function(a,b){return secCount[b]-secCount[a]}),top=secs.length?secCount[secs[0]]:1;
+  var hot=(x.hot||[]).length;
+  d.innerHTML='<div class="hd">'+(x.thumb?'<img class="thumb" alt="" src="'+esc(x.thumb)+'">':'')+'<div style="flex:1;min-width:0"><h3>'+esc(label(host))+'</h3>'+(x.creator?'<div class="sub">by '+esc(x.creator)+'</div>':'')+'</div><a class="hbtn" href="'+esc(x.url||('https://'+host))+'" target="_blank" rel="noopener">Open site ↗</a><button class="hbtn" id="dx" aria-label="Close">✕</button></div><div class="bd">'+
+  visitMap(x.sessions.filter(function(s){return s.unlocked||s.gate}),{aspect:2.6,px:600})+
+  '<div class="dstats"><span><b>'+x.people+'</b> '+(x.people===1?'person':'people')+'</span><span><b>'+x.visits+'</b> visit'+(x.visits===1?'':'s')+'</span><span><b>'+dur(x.engaged)+'</b> read</span><span><b>'+x.clicks+'</b> click'+(x.clicks===1?'':'s')+'</span>'+(hot?'<span title="'+esc(x.hot.join(' · '))+'"><b>🔥 '+hot+'</b> hot</span>':'')+'</div>'+
+  (secs.length?'<div class="section-title">Most-read sections</div><div class="panel" style="padding:8px 12px">'+secs.slice(0,8).map(function(l){return '<div class="secrow"><span>'+esc(l)+'</span><span class="mono hint">'+secCount[l]+'×</span><i style="width:'+Math.round(secCount[l]/top*100)+'%"></i></div>'}).join('')+'</div>':'')+
   '<div class="section-title">Visit timeline</div><div class="panel feed">'+(x.sessions.length?x.sessions.slice().sort(function(a,b){return b.last-a.last}).map(function(s){return sessionCard(s,false)}).join(''):'<div class="empty">No visits yet.</div>')+'</div>'+
-  '<div class="section-title">Personal link</div><div class="panel" style="padding:14px">'+linkForm(host)+'</div></div>';
+  '<div class="section-title">Personal link</div><div class="panel" style="padding:12px">'+linkForm(host)+'</div></div>';
   $('dx').onclick=function(){closeDrawer()};
   bindLinkForm();
   d.classList.add('on');$('dbg').classList.add('on');d.setAttribute('aria-hidden','false');d.scrollTop=0;
