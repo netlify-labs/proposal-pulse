@@ -42,7 +42,10 @@ export function parseUA(ua: string) {
   return { device, browser, os };
 }
 
-export type Geo = { city?: string; country?: string; cc?: string; tz?: string };
+export type Geo = { city?: string; country?: string; cc?: string; tz?: string; lat?: number; lon?: number };
+
+/** Round a coordinate to 1 decimal (about 10 km), so stored locations stay city-level. */
+const coarse = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.round(n * 10) / 10 : null);
 
 export function newSession(ev: BeaconEvent, ua: string, geo: Geo, now: number): Session {
   return {
@@ -67,6 +70,8 @@ export function newSession(ev: BeaconEvent, ua: string, geo: Geo, now: number): 
     country: geo.country || "",
     cc: geo.cc || "",
     tz: geo.tz || "",
+    lat: coarse(geo.lat),
+    lon: coarse(geo.lon),
     visitNo: 0,
     visitorCount: 0,
     newVisitor: false,

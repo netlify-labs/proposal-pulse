@@ -8,6 +8,7 @@ Setting it up with an AI coding agent? Go to [Setup](#setup).
 
 - **Opens, read time, scroll depth, sections read and clicks** for every tracked project.
 - **🔥 Hot visits:** someone read to the end and clicked, or came back for another visit.
+- **Visitor maps:** every visitor on one map, and each proposal's visitors in its slide-out, zoomed to fit. Drawn from a built-in world outline, so no map service sees visitor locations.
 - **Thumbnails and creators:** each proposal shows Netlify's screenshot of its latest production deploy (click it to open the site) and who created it, with a creator filter.
 - **Personal links:** add `?r=jane` to a link and every visit from that browser is labelled "jane", even if she comes back without the parameter.
 - **Forward detection:** a new browser opening the same project shows up as "new person opened".
@@ -64,7 +65,7 @@ flowchart LR
 
 ### Data and privacy
 
-The tracker sets no cookies and the collector stores no IP addresses. It keeps a random browser ID in `localStorage` and a tab session ID in `sessionStorage`. Location (city, country, timezone) comes from Netlify's edge geolocation. Visits older than `RETENTION_DAYS` (default 180) are deleted daily. Check whether your consent requirements apply to this kind of analytics before you track projects shared with people in regulated regions.
+The tracker sets no cookies and the collector stores no IP addresses. It keeps a random browser ID in `localStorage` and a tab session ID in `sessionStorage`. Location (city, country, timezone, and coordinates rounded to about 10 km for the maps) comes from Netlify's edge geolocation, which is based on the visitor's network, so VPNs and corporate proxies can place people in the wrong city. Visits older than `RETENTION_DAYS` (default 180) are deleted daily. Check whether your consent requirements apply to this kind of analytics before you track projects shared with people in regulated regions.
 
 ## Requirements
 
