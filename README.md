@@ -7,6 +7,8 @@ Setting it up with an AI coding agent? Go to [Setup](#setup).
 ## What it does
 
 - **Opens, read time, scroll depth, sections read and clicks** for every tracked project.
+- **🔥 Hot visits:** someone read to the end and clicked, or came back for another visit.
+- **Thumbnails and creators:** each proposal shows Netlify's screenshot of its latest production deploy (click it to open the site) and who created it, with a creator filter.
 - **Personal links:** add `?r=jane` to a link and every visit from that browser is labelled "jane", even if she comes back without the parameter.
 - **Forward detection:** a new browser opening the same project shows up as "new person opened".
 - **Password-protected projects:** visits to the Netlify password page are recorded separately, including wrong attempts.

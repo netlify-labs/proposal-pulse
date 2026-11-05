@@ -114,6 +114,10 @@ input:focus,select.in:focus{outline:2px solid var(--teal);outline-offset:-1px}
 .status-row .d{font-size:12.5px;color:var(--muted)}
 .ok{color:var(--teal-ink);font-weight:600}.no{color:var(--pink);font-weight:600}
 .sites-list{max-height:520px;overflow:auto}
+.thumb{display:block;width:72px;height:45px;border-radius:6px;object-fit:cover;object-position:top;border:1px solid var(--line);background:var(--chip)}
+td.tcell{width:84px;padding-right:0}
+.by{font-size:12px;color:var(--muted)}
+.fire{margin-left:6px;font-size:12px;white-space:nowrap}
 .sites-list label{display:grid;grid-template-columns:22px 1fr auto;gap:10px;padding:9px 14px;border-top:1px solid var(--line);align-items:center;cursor:pointer}
 .sites-list label:hover{background:var(--soft)}
 .sites-list .nm{font-weight:500;word-break:break-all}
@@ -137,7 +141,7 @@ input:focus,select.in:focus{outline:2px solid var(--teal);outline-offset:-1px}
 (function(){
 "use strict";
 var LOGO='<svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#05BDBA" fill-opacity=".14"/><path d="M4 17h6l3-7 5 13 3-6h7" fill="none" stroke="#05BDBA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-var S={key:'open',days:+(ls('pp_days')||30),tab:ls('pp_tab')||'activity',data:null,status:null,sites:null,q:'',siteFilter:'tracked',siteQ:'',sel:{}};
+var S={key:'open',days:+(ls('pp_days')||30),tab:ls('pp_tab')||'activity',data:null,status:null,sites:null,q:'',siteFilter:'tracked',siteQ:'',sel:{},creator:ls('pp_creator')||'',hotOnly:false};
 function ss(k,v){try{if(v===undefined)return sessionStorage.getItem(k);if(v===null)sessionStorage.removeItem(k);else sessionStorage.setItem(k,v)}catch(e){return null}}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -152,19 +156,25 @@ function logout(){location.reload()}
 
 // ---------- aggregation ----------
 function clicksOf(s){return (s.clicks||[]).length}
+// A visit is hot when the person read to the end and clicked, or came back.
+function hotWhy(s){var r=[];if(!(s.unlocked&&s.human))return r;if((s.maxScroll||0)>=90&&clicksOf(s))r.push('read to the end and clicked');if(!s.newVisitor&&s.visitNo>1)r.push('came back (visit #'+s.visitNo+')');return r}
+function trackedByHost(){var m={};(S.data.tracked||[]).forEach(function(t){m[t.host]=t;(t.hosts||[]).forEach(function(h){m[h]=t})});return m}
+function creatorOf(host){var t=trackedByHost()[host];return (t&&t.createdByName)||''}
+function creators(){var c={};(S.data.tracked||[]).forEach(function(t){if(t.createdByName)c[t.createdByName]=1});return Object.keys(c).sort()}
+function creatorSelect(id){var cs=creators();if(!cs.length)return '';return '<select class="in" id="'+id+'"><option value="">All creators</option>'+cs.map(function(c){return '<option'+(c===S.creator?' selected':'')+' value="'+esc(c)+'">'+esc(c)+'</option>'}).join('')+'</select>'}
 function bySite(){
   var m={};
-  (S.data.tracked||[]).forEach(function(t){m[t.host]={host:t.host,name:t.name,url:t.url,tracked:true,sessions:[],vids:{},last:0,engaged:0,maxScroll:0,clicks:0,gateOnly:0,wrong:0,recips:{}}});
+  (S.data.tracked||[]).forEach(function(t){m[t.host]={host:t.host,name:t.name,url:t.url,thumb:t.screenshotUrl||'',creator:t.createdByName||'',tracked:true,sessions:[],vids:{},last:0,engaged:0,maxScroll:0,clicks:0,hot:[],gateOnly:0,wrong:0,recips:{}}});
   S.data.sessions.forEach(function(s){
-    var x=m[s.host]||(m[s.host]={host:s.host,name:label(s.host),url:'https://'+s.host,tracked:false,sessions:[],vids:{},last:0,engaged:0,maxScroll:0,clicks:0,gateOnly:0,wrong:0,recips:{}});
+    var x=m[s.host]||(m[s.host]={host:s.host,name:label(s.host),url:'https://'+s.host,thumb:'',creator:'',tracked:false,sessions:[],vids:{},last:0,engaged:0,maxScroll:0,clicks:0,hot:[],gateOnly:0,wrong:0,recips:{}});
     x.sessions.push(s);
-    if(s.unlocked&&s.human){x.vids[s.vid]=1;x.last=Math.max(x.last,s.last);x.engaged+=s.engagedMs;x.maxScroll=Math.max(x.maxScroll,s.maxScroll);x.clicks+=clicksOf(s);if(s.r)x.recips[s.r]=1}
+    if(s.unlocked&&s.human){x.vids[s.vid]=1;x.last=Math.max(x.last,s.last);x.engaged+=s.engagedMs;x.maxScroll=Math.max(x.maxScroll,s.maxScroll);x.clicks+=clicksOf(s);if(s.r)x.recips[s.r]=1;var w=hotWhy(s);if(w.length)x.hot.push((s.r||'someone')+' '+w.join(' and '))}
     else if(s.gate&&!s.unlocked){x.gateOnly++}
     x.wrong+=s.wrongPw||0;
   });
   return Object.keys(m).map(function(k){var x=m[k];x.people=Object.keys(x.vids).length;x.visits=x.sessions.filter(function(s){return s.unlocked&&s.human}).length;x.score=heat(x);return x});
 }
-function heat(x){if(!x.visits)return 0;var sc=Math.min(40,x.engaged/1000/60*8)+Math.min(20,x.maxScroll/5)+Math.min(10,x.clicks*2)+Math.min(20,(x.people-1)*10)+Math.min(10,(x.visits-1)*4);var rec=(Date.now()-x.last)/86400000;if(rec>14)sc*=.5;return Math.round(Math.min(100,sc))}
+function heat(x){if(!x.visits)return 0;var sc=Math.min(40,x.engaged/1000/60*8)+Math.min(20,x.maxScroll/5)+Math.min(10,x.clicks*2)+Math.min(20,x.hot.length*10)+Math.min(20,(x.people-1)*10)+Math.min(10,(x.visits-1)*4);var rec=(Date.now()-x.last)/86400000;if(rec>14)sc*=.5;return Math.round(Math.min(100,sc))}
 function heatColor(v){return v>=60?'var(--pink)':v>=30?'var(--amber)':v>0?'var(--teal)':'var(--line)'}
 
 // ---------- rendering ----------
@@ -223,12 +233,13 @@ function sessionCard(s,withSite){
   if(!s.unlocked){icon='🔒';cls='gate';title=s.wrongPw?'Tried the password':'Reached the password page'}
   else if(s.engagedMs>=120000){icon='📖';title='Deep read'}
   else if(!s.human){icon='·';cls='gate';title='Brief visit (no interaction)'}
+  var why=hotWhy(s);if(why.length){icon='🔥';title=why[0].charAt(0).toUpperCase()+why.join(' and ').slice(1)}
   var badges=[];
   if(isLive)badges.push('<span class="badge live">LIVE</span>');
   if(s.alerts&&s.alerts.indexOf('open')>-1){if(s.newVisitor&&s.visitorCount>1)badges.push('<span class="badge amber">new person · '+s.visitorCount+' total</span>');else if(s.visitNo>1)badges.push('<span class="badge teal">visit #'+s.visitNo+'</span>')}
   if(s.wrongPw)badges.push('<span class="badge pink">wrong password ×'+s.wrongPw+'</span>');
   var where=[s.city,s.cc].filter(Boolean).join(', ')||'Unknown location';
-  var h='<div class="item"><div class="ico '+cls+'">'+icon+'</div><div><div class="t1">'+esc(title)+(withSite?' · <a class="site" href="#site='+encodeURIComponent(s.host)+'">'+esc(label(s.host))+'</a>':'')+' '+badges.join(' ')+'</div>'+
+  var h='<div class="item"><div class="ico '+cls+'">'+icon+'</div><div><div class="t1">'+esc(title)+(withSite?' · <a class="site" href="#site='+encodeURIComponent(s.host)+'">'+esc(label(s.host))+'</a>'+(creatorOf(s.host)?' <span class="by">by '+esc(creatorOf(s.host))+'</span>':''):'')+' '+badges.join(' ')+'</div>'+
   '<div class="t2"><span class="who">'+(s.r?esc(s.r):'Unknown recipient')+'</span> · '+esc(where)+' · '+esc(s.device+' · '+s.browser+'/'+s.os)+(s.ref?' · via '+esc(s.ref):'')+'</div>';
   if(s.unlocked){
     h+='<div class="meta"><span>Read <b>'+dur(s.engagedMs)+'</b></span><span>Scrolled <span class="bar"><i style="width:'+(s.maxScroll||0)+'%"></i></span> <b>'+(s.maxScroll||0)+'%</b></span><span>Clicks <b>'+(s.clicks||[]).length+'</b></span>'+(s.paths&&s.paths.length>1?'<span>Pages <b>'+s.paths.length+'</b></span>':'')+'</div>';
@@ -247,21 +258,24 @@ function activity(b){
   var showAll=S.showBrief;
   var vis=list.filter(function(s){return showAll||s.human||(!s.unlocked&&s.gate)});
   var hidden=list.length-vis.length;
-  b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="aq" placeholder="Filter by site or recipient" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+
+  b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="aq" placeholder="Filter by site or recipient" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+creatorSelect('acr')+
   (hidden||showAll?'<label class="hint"><input type="checkbox" id="brief" '+(showAll?'checked':'')+'> show brief visits ('+(showAll?list.filter(function(s){return s.unlocked&&!s.human}).length:hidden)+')</label>':'')+'</div><div class="feed" id="feed"></div></div>';
-  function draw(){var q=S.q.toLowerCase();var f=vis.filter(function(s){return !q||s.host.indexOf(q)>-1||(s.r||'').toLowerCase().indexOf(q)>-1}).slice(0,200);
+  function draw(){var q=S.q.toLowerCase();var f=vis.filter(function(s){return (!q||s.host.indexOf(q)>-1||(s.r||'').toLowerCase().indexOf(q)>-1)&&(!S.creator||creatorOf(s.host)===S.creator)}).slice(0,200);
     $('feed').innerHTML=f.length?f.map(function(s){return sessionCard(s,true)}).join(''):'<div class="empty">'+(S.data.sessions.length?'No matching activity.':'No activity yet. Once the tracker is on your sites, opens will show up here within seconds.')+'</div>'}
   draw();
   $('aq').oninput=function(){S.q=this.value;draw()};
+  if($('acr'))$('acr').onchange=function(){S.creator=this.value;ls('pp_creator',this.value||null);draw()};
   if($('brief'))$('brief').onchange=function(){S.showBrief=this.checked;activity(b)};
 }
 function proposals(b){
   var sites=bySite().sort(function(a,b){return (b.last-a.last)||(a.name<b.name?-1:1)});
-  b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="pq" placeholder="Search proposals" value="'+esc(S.q)+'" style="flex:1;min-width:160px"><span class="hint">Heat = read time + scroll + clicks + people + return visits</span></div><div style="overflow-x:auto"><table><thead><tr><th>Proposal</th><th>Last opened</th><th class="hide-sm">People</th><th class="hide-sm">Visits</th><th>Read time</th><th class="hide-sm">Scroll</th><th>Clicks</th></tr></thead><tbody id="pt"></tbody></table></div></div>';
-  function draw(){var q=S.q.toLowerCase();var f=sites.filter(function(x){return !q||x.host.indexOf(q)>-1||x.name.toLowerCase().indexOf(q)>-1||Object.keys(x.recips).join(' ').toLowerCase().indexOf(q)>-1});
-    $('pt').innerHTML=f.length?f.map(function(x){return '<tr data-host="'+esc(x.host)+'"><td><span class="heat" style="background:'+heatColor(x.score)+'" title="Heat '+x.score+'"></span><b>'+esc(label(x.host))+'</b>'+(Object.keys(x.recips).length?'<div class="hint" style="margin-left:18px">'+esc(Object.keys(x.recips).slice(0,4).join(', '))+'</div>':'')+(x.gateOnly&&!x.visits?'<div class="hint" style="margin-left:18px">🔒 reached password page ×'+x.gateOnly+'</div>':'')+'</td><td class="num">'+(x.last?ago(x.last):'<span class="hint">not yet</span>')+'</td><td class="num hide-sm">'+(x.people||'–')+'</td><td class="num hide-sm">'+(x.visits||'–')+'</td><td class="num">'+(x.engaged?dur(x.engaged):'–')+'</td><td class="num hide-sm">'+(x.visits?x.maxScroll+'%':'–')+'</td><td class="num">'+(x.clicks||'')+'</td></tr>'}).join(''):'<tr><td colspan="7" class="empty">No proposals tracked yet. Go to Setup to add the tracker to your sites.</td></tr>';
-    document.querySelectorAll('#pt tr[data-host]').forEach(function(tr){tr.onclick=function(){location.hash='site='+encodeURIComponent(tr.dataset.host)}})}
+  b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="pq" placeholder="Search proposals" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+creatorSelect('pcr')+'<label class="hint"><input type="checkbox" id="phot" '+(S.hotOnly?'checked':'')+'> 🔥 only</label><span class="hint">🔥 = read to the end and clicked, or came back</span></div><div style="overflow-x:auto"><table><thead><tr><th></th><th>Proposal</th><th>Last opened</th><th class="hide-sm">People</th><th class="hide-sm">Visits</th><th>Read time</th><th class="hide-sm">Scroll</th><th>Clicks</th></tr></thead><tbody id="pt"></tbody></table></div></div>';
+  function draw(){var q=S.q.toLowerCase();var f=sites.filter(function(x){return (!q||x.host.indexOf(q)>-1||x.name.toLowerCase().indexOf(q)>-1||Object.keys(x.recips).join(' ').toLowerCase().indexOf(q)>-1)&&(!S.creator||x.creator===S.creator)&&(!S.hotOnly||x.hot.length)});
+    $('pt').innerHTML=f.length?f.map(function(x){return '<tr data-host="'+esc(x.host)+'"><td class="tcell"><a href="'+esc(x.url)+'" target="_blank" rel="noopener" class="topen" title="Open '+esc(label(x.host))+'">'+(x.thumb?'<img class="thumb" loading="lazy" alt="" src="'+esc(x.thumb)+'">':'<span class="thumb"></span>')+'</a></td><td><span class="heat" style="background:'+heatColor(x.score)+'" title="Heat '+x.score+'"></span><b>'+esc(label(x.host))+'</b>'+(x.hot.length?'<span class="fire" title="'+esc(x.hot.join(' · '))+'">🔥 '+x.hot.length+'</span>':'')+(x.creator?'<div class="by" style="margin-left:18px">by '+esc(x.creator)+'</div>':'')+(Object.keys(x.recips).length?'<div class="hint" style="margin-left:18px">'+esc(Object.keys(x.recips).slice(0,4).join(', '))+'</div>':'')+(x.gateOnly&&!x.visits?'<div class="hint" style="margin-left:18px">🔒 reached password page ×'+x.gateOnly+'</div>':'')+'</td><td class="num">'+(x.last?ago(x.last):'<span class="hint">not yet</span>')+'</td><td class="num hide-sm">'+(x.people||'–')+'</td><td class="num hide-sm">'+(x.visits||'–')+'</td><td class="num">'+(x.engaged?dur(x.engaged):'–')+'</td><td class="num hide-sm">'+(x.visits?x.maxScroll+'%':'–')+'</td><td class="num">'+(x.clicks||'')+'</td></tr>'}).join(''):'<tr><td colspan="8" class="empty">No proposals tracked yet. Go to Setup to add the tracker to your sites.</td></tr>';
+    document.querySelectorAll('#pt tr[data-host]').forEach(function(tr){tr.onclick=function(){location.hash='site='+encodeURIComponent(tr.dataset.host)}});document.querySelectorAll('#pt a.topen').forEach(function(a){a.onclick=function(e){e.stopPropagation()}})}
   draw();$('pq').oninput=function(){S.q=this.value;draw()};
+  if($('pcr'))$('pcr').onchange=function(){S.creator=this.value;ls('pp_creator',this.value||null);draw()};
+  $('phot').onchange=function(){S.hotOnly=this.checked;draw()};
 }
 function openFromHash(){var m=/site=([^&]+)/.exec(location.hash);if(m&&S.data)drawer(decodeURIComponent(m[1]));else closeDrawer(true)}
 window.addEventListener('hashchange',openFromHash);

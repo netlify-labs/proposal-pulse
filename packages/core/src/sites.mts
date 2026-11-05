@@ -1,4 +1,4 @@
-import { ensureSnippet, removeSnippet, type NetlifySite } from "./netlify.mts";
+import { creatorName, ensureSnippet, removeSnippet, type NetlifySite } from "./netlify.mts";
 import type { Db, SiteRecord, SiteStatus } from "./types.mts";
 
 /** Shared reads and writes on the `sites` table, used by both apps. */
@@ -14,6 +14,9 @@ const rowToSite = (r: any): SiteRecord => ({
   snippetId: r.snippet_id,
   via: r.via,
   trackedAt: r.tracked_at ? new Date(r.tracked_at).getTime() : null,
+  screenshotUrl: r.screenshot_url ?? null,
+  createdBy: r.created_by ?? null,
+  createdByName: r.created_by_name ?? null,
 });
 
 export async function getSiteRecord(db: Db, id: string): Promise<SiteRecord | null> {
@@ -36,29 +39,39 @@ export async function listSiteRecords(db: Db, status?: SiteStatus): Promise<Site
 
 export async function upsertSite(
   db: Db,
-  s: Pick<NetlifySite, "id" | "name" | "team" | "url" | "host" | "hosts">,
+  s: Pick<NetlifySite, "id" | "name" | "team" | "url" | "host" | "hosts"> & Partial<Pick<NetlifySite, "screenshotUrl" | "createdBy">>,
   status: SiteStatus,
-  extra: { snippetId?: string; via?: string } = {},
+  extra: { snippetId?: string; via?: string; createdByName?: string } = {},
 ) {
   await db.query(
-    `INSERT INTO sites (id, name, team, url, host, hosts, status, snippet_id, via, tracked_at, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $7 = 'tracked' THEN now() END, now())
+    `INSERT INTO sites (id, name, team, url, host, hosts, status, snippet_id, via, tracked_at, updated_at, screenshot_url, created_by, created_by_name)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $7 = 'tracked' THEN now() END, now(), $10, $11, $12)
      ON CONFLICT (id) DO UPDATE SET
        name = EXCLUDED.name, team = EXCLUDED.team, url = EXCLUDED.url, host = EXCLUDED.host, hosts = EXCLUDED.hosts,
        status = EXCLUDED.status,
        snippet_id = COALESCE(EXCLUDED.snippet_id, sites.snippet_id),
        via = COALESCE(EXCLUDED.via, sites.via),
        tracked_at = CASE WHEN EXCLUDED.status = 'tracked' THEN COALESCE(sites.tracked_at, now()) ELSE sites.tracked_at END,
+       screenshot_url = COALESCE(EXCLUDED.screenshot_url, sites.screenshot_url),
+       created_by = COALESCE(EXCLUDED.created_by, sites.created_by),
+       created_by_name = COALESCE(EXCLUDED.created_by_name, sites.created_by_name),
        updated_at = now()`,
-    [s.id, s.name, s.team, s.url, s.host, s.hosts, status, extra.snippetId ?? null, extra.via ?? null],
+    [s.id, s.name, s.team, s.url, s.host, s.hosts, status, extra.snippetId ?? null, extra.via ?? null, s.screenshotUrl || null, s.createdBy || null, extra.createdByName || null],
   );
 }
 
-/** Inject the tracker into a project and record it as tracked. */
+/** Inject the tracker into a project and record it as tracked, with its thumbnail and creator. */
 export async function trackSite(db: Db, site: NetlifySite, collectorUrl: string, via: string) {
   const snippetId = await ensureSnippet(site.id, collectorUrl);
-  await upsertSite(db, site, "tracked", { snippetId, via });
+  const createdByName = await creatorName(site.team, site.createdBy).catch(() => "");
+  await upsertSite(db, site, "tracked", { snippetId, via, createdByName });
   return snippetId;
+}
+
+/** Refresh a tracked project's name, hosts, thumbnail and creator after a new production deploy. */
+export async function refreshTrackedSite(db: Db, site: NetlifySite) {
+  const createdByName = await creatorName(site.team, site.createdBy).catch(() => "");
+  await upsertSite(db, site, "tracked", { createdByName });
 }
 
 /** Remove the tracker and mark the project excluded so webhooks never re-add it. */
