@@ -20,6 +20,9 @@ export const pulseTeams = () => envList("PULSE_TEAMS");
 
 export const stripSlash = (url: string) => url.replace(/\/+$/, "");
 
+/** This project's production URL. Netlify sets URL for every function; no config needed. */
+export const ownUrl = () => stripSlash(env("URL"));
+
 export const hostOf = (url: string) => {
   try {
     return new URL(url).hostname;

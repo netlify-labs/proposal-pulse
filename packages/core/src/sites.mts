@@ -67,7 +67,17 @@ export async function untrackSite(db: Db, id: string) {
   await db.query("UPDATE sites SET status = 'excluded', updated_at = now() WHERE id = $1", [id]);
 }
 
-/** Drop a project from Proposal Pulse without calling Netlify (e.g. it was deleted). */
+/**
+ * Drop a project and its visit data from Proposal Pulse without calling Netlify (e.g. the
+ * project was deleted). A later webhook for the same project treats it as new.
+ */
 export async function forgetSite(db: Db, id: string) {
+  const { rows } = await db.query<{ hosts: string[]; host: string }>("SELECT host, hosts FROM sites WHERE id = $1", [id]);
+  if (rows[0]) {
+    const hosts = [...new Set([rows[0].host, ...(rows[0].hosts || [])].filter(Boolean))];
+    await db.query("DELETE FROM alerts WHERE sid IN (SELECT sid FROM sessions WHERE host = ANY($1))", [hosts]);
+    await db.query("DELETE FROM sessions WHERE host = ANY($1)", [hosts]);
+    await db.query("DELETE FROM visitors WHERE host = ANY($1)", [hosts]);
+  }
   await db.query("DELETE FROM sites WHERE id = $1", [id]);
 }

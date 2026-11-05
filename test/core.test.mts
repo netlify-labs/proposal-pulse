@@ -5,7 +5,9 @@ import {
   newAlerts,
   newSession,
   parseUA,
+  readManageRequest,
   readOrgHook,
+  signManageRequest,
   signNetlifyWebhook,
   verifyNetlifySignature,
   type BeaconEvent,
@@ -90,4 +92,19 @@ test("parseUA", () => {
     os: "iOS",
   });
   expect(parseUA("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/130.0 Safari/537.36 Edg/130.0")).toEqual({ device: "Desktop", browser: "Edge", os: "Windows" });
+});
+
+describe("signed admin requests (dashboard -> collector)", () => {
+  test("round-trips a valid request", () => {
+    const { body, signature } = signManageRequest({ op: "untrack", ids: ["a"] }, SECRET, 1_000_000);
+    expect(readManageRequest(body, signature, SECRET, 1_000_000 + 60_000)).toMatchObject({ op: "untrack", ids: ["a"] });
+  });
+  test("rejects tampering, the wrong secret, expired requests and unknown ops", () => {
+    const { body, signature } = signManageRequest({ op: "untrack", ids: ["a"] }, SECRET, 1_000_000);
+    expect(readManageRequest(body.replace('"a"', '"b"'), signature, SECRET, 1_000_000)).toBeNull();
+    expect(readManageRequest(body, signature, "other", 1_000_000)).toBeNull();
+    expect(readManageRequest(body, signature, SECRET, 1_000_000 + 6 * 60_000)).toBeNull();
+    const bad = signManageRequest({ op: "drop" as any }, SECRET, 1_000_000);
+    expect(readManageRequest(bad.body, bad.signature, SECRET, 1_000_000)).toBeNull();
+  });
 });

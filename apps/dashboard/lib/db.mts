@@ -8,8 +8,8 @@ import { env, type Db } from "../../../packages/core/src/index.mts";
  * It uses plain `pg` on purpose: installing @netlify/database here would make Netlify
  * provision a second, empty database for the dashboard project.
  *
- * Writes from the dashboard are limited to the `sites` and `settings` tables; visit data is
- * only ever written by the collector.
+ * This is the read-only role `netlify database status --show-credentials` hands out. Every
+ * change (track, untrack, forget) goes to the collector as a signed request instead.
  */
 let pool: pg.Pool | null = null;
 

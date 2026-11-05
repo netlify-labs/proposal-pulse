@@ -60,7 +60,18 @@ export function toNetlifySite(s: any): NetlifySite {
 
 export const getMe = () => netlifyApi<{ id: string; email: string; full_name: string }>("/user");
 
-export const getSite = async (id: string) => toNetlifySite(await netlifyApi(`/sites/${id}`));
+export const getSite = async (id: string) => toNetlifySite(await netlifyApi(`/sites/${encodeURIComponent(id)}`));
+
+/** Find a project by ID, name ("acme-proposal"), hostname or URL. The API accepts IDs and domains. */
+export function resolveSite(ref: string) {
+  const r = ref.trim();
+  if (/^[0-9a-f-]{36}$/i.test(r)) return getSite(r);
+  let host = r;
+  try {
+    if (/^https?:\/\//i.test(r)) host = new URL(r).hostname;
+  } catch {}
+  return getSite(host.includes(".") ? host : `${host}.netlify.app`);
+}
 
 /** Every project in a team, 10 pages of 100 at a time. */
 export async function listTeamSites(team: string): Promise<NetlifySite[]> {
@@ -102,17 +113,4 @@ export async function removeSnippet(siteId: string): Promise<void> {
   for (const x of list.filter((x) => x.title === SNIPPET_TITLE)) {
     await netlifyApi(`/sites/${siteId}/snippets/${x.id}`, { method: "DELETE" });
   }
-}
-
-// ---------- Organization webhooks ----------
-
-export const ORG_HOOK_EVENTS = ["site_created", "site_published"] as const;
-
-/** Subscribe one org webhook event. Needs an Organization Owner's token. */
-export function createOrgHook(orgId: string, event: string, url: string, secret: string, tokenVar = "NETLIFY_TOKEN") {
-  return netlifyApi<{ id: string }>(
-    `/organizations/${encodeURIComponent(orgId)}/hooks`,
-    { method: "POST", body: JSON.stringify({ event, data: { url, signature_secret: secret } }) },
-    tokenVar,
-  );
 }

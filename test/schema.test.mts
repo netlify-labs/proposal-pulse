@@ -2,7 +2,7 @@ import { NetlifyDB } from "@netlify/database-dev";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { claimAlert, recordBeacon, type Pool } from "../apps/collector/lib/visits.mts";
-import { getSiteRecord, listSiteRecords, trackedSiteForHost, upsertSite, type BeaconEvent, type Db } from "../packages/core/src/index.mts";
+import { forgetSite, getSiteRecord, listSiteRecords, trackedSiteForHost, upsertSite, type BeaconEvent, type Db } from "../packages/core/src/index.mts";
 
 /**
  * Applies the real migrations and runs the apps' real queries.
@@ -113,5 +113,17 @@ describe("beacons", () => {
   test("each alert is claimed once", async () => {
     expect(await claimAlert(db, "lz0abc12xyz", "open")).toBe(true);
     expect(await claimAlert(db, "lz0abc12xyz", "open")).toBe(false);
+  });
+});
+
+describe("forget", () => {
+  test("removes the project and all of its visit data", async () => {
+    await forgetSite(db, site.id);
+    expect(await getSiteRecord(db, site.id)).toBeNull();
+    const counts = await pool.query(
+      "SELECT (SELECT count(*) FROM sessions WHERE host = $1)::int s, (SELECT count(*) FROM visitors WHERE host = $1)::int v",
+      [site.host],
+    );
+    expect(counts.rows[0]).toEqual({ s: 0, v: 0 });
   });
 });
