@@ -134,6 +134,12 @@ input:focus,select.in:focus{outline:2px solid var(--teal);outline-offset:-1px}
 .vmap .land{fill:var(--panel);stroke:var(--line);stroke-width:.8}
 .vmap .cap{position:absolute;left:10px;bottom:8px;display:flex;gap:10px;align-items:center;font-size:11.5px;color:var(--muted);background:var(--panel);border:1px solid var(--line);padding:2px 8px;border-radius:7px}
 .vmap .cap i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:-1px}
+.vmap g.pick{cursor:pointer;outline:none}
+.vmap g.pick:hover circle+circle,.vmap g.pick:focus-visible circle+circle{stroke:var(--ink)}
+.vmap g.sel circle+circle{stroke:var(--ink);stroke-width:2.5px;vector-effect:non-scaling-stroke}
+.vmap g.dim{opacity:.35}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;padding:4px 6px 4px 10px;border:1px solid var(--line);border-radius:999px;background:var(--soft);white-space:nowrap}
+.chip button{border:0;background:none;cursor:pointer;font-size:14px;line-height:1;color:var(--muted);padding:0 2px}
 .vmap .ttl{position:absolute;left:10px;top:8px;font-size:12px;font-weight:600;color:var(--muted)}
 .thumb{display:block;width:72px;height:45px;border-radius:6px;object-fit:cover;object-position:top;border:1px solid var(--line);background:var(--chip)}
 td.tcell{width:84px;padding-right:0}
@@ -163,7 +169,7 @@ td.tcell{width:84px;padding-right:0}
 (function(){
 "use strict";
 var LOGO='<svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#05BDBA" fill-opacity=".14"/><path d="M4 17h6l3-7 5 13 3-6h7" fill="none" stroke="#05BDBA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-var S={key:'open',days:+(ls('pp_range')||2),tab:ls('pp_tab')||'activity',data:null,status:null,sites:null,q:'',siteFilter:'tracked',siteQ:'',sel:{},creator:ls('pp_creator')||'',hotOnly:false};
+var S={key:'open',days:+(ls('pp_range')||2),tab:ls('pp_tab')||'activity',data:null,status:null,sites:null,q:'',siteFilter:'tracked',siteQ:'',sel:{},creator:ls('pp_creator')||'',hotOnly:false,loc:null};
 function ss(k,v){try{if(v===undefined)return sessionStorage.getItem(k);if(v===null)sessionStorage.removeItem(k);else sessionStorage.setItem(k,v)}catch(e){return null}}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
@@ -181,12 +187,14 @@ function clicksOf(s){return (s.clicks||[]).length}
 function rangeLabel(d){return d===2?'48 hours':d+' days'}
 // ---------- visitor maps ----------
 // Dots for visits with coordinates (captured by the collector), grouped by place; zooms to fit.
+function locKey(s){return typeof s.lat==='number'&&typeof s.lon==='number'?s.lat.toFixed(1)+','+s.lon.toFixed(1):''}
+// opt.pick: dots are clickable (data-locs lists the place keys merged into the dot); opt.sel: keys of the picked dot
 function visitMap(sessions,opt){
   var W=window.WORLD_LAND;if(!W)return '';opt=opt||{};var aspect=opt.aspect||2.5,px=opt.px||900,now=Date.now();
   function xy(lon,lat){return [(lon+180)/360*W.w,(W.lat1-lat)/(W.lat1-W.lat0)*W.h]}
   var g={},noLoc=0;
   sessions.forEach(function(s){if(typeof s.lat!=='number'||typeof s.lon!=='number'){noLoc++;return}
-    var k=s.lat.toFixed(1)+','+s.lon.toFixed(1),p=g[k]||(g[k]={lat:s.lat,lon:s.lon,n:0,last:0,place:[s.city,s.cc].filter(Boolean).join(', ')||'Unknown',who:{},sites:{}});
+    var k=locKey(s),p=g[k]||(g[k]={key:k,lat:s.lat,lon:s.lon,n:0,last:0,place:[s.city,s.cc].filter(Boolean).join(', ')||'Unknown',who:{},sites:{}});
     p.n++;p.last=Math.max(p.last,s.last);if(s.r)p.who[s.r]=1;p.sites[label(s.host)]=1});
   var pts=Object.keys(g).map(function(k){var p=g[k],c=xy(p.lon,p.lat);p.x=c[0];p.y=c[1];return p});
   // viewBox: fit the dots with padding, never closer than ~1/6 of the world, at the requested aspect
@@ -198,13 +206,15 @@ function visitMap(sessions,opt){
   // merge dots that would sit within ~14px of each other into one bigger dot (weighted centre)
   var cl=[];pts.sort(function(a,b){return b.n-a.n}).forEach(function(p){
     var hit=null;for(var i=0;i<cl.length;i++){var c=cl[i];if(Math.hypot(c.x-p.x,c.y-p.y)/k<14){hit=c;break}}
-    if(!hit){cl.push({x:p.x,y:p.y,n:p.n,last:p.last,places:[p.place],who:Object.assign({},p.who),sites:Object.assign({},p.sites)});return}
-    hit.x=(hit.x*hit.n+p.x*p.n)/(hit.n+p.n);hit.y=(hit.y*hit.n+p.y*p.n)/(hit.n+p.n);hit.n+=p.n;hit.last=Math.max(hit.last,p.last);
+    if(!hit){cl.push({x:p.x,y:p.y,n:p.n,last:p.last,keys:[p.key],places:[p.place],who:Object.assign({},p.who),sites:Object.assign({},p.sites)});return}
+    hit.x=(hit.x*hit.n+p.x*p.n)/(hit.n+p.n);hit.y=(hit.y*hit.n+p.y*p.n)/(hit.n+p.n);hit.n+=p.n;hit.last=Math.max(hit.last,p.last);hit.keys.push(p.key);
     if(hit.places.indexOf(p.place)<0)hit.places.push(p.place);Object.assign(hit.who,p.who);Object.assign(hit.sites,p.sites)});
   cl.forEach(function(c){c.place=c.places.slice(0,3).join(' / ')+(c.places.length>3?' +'+(c.places.length-3):'')});
+  var sel=opt.sel||[];
   var dots=cl.map(function(p){var r=(4+Math.sqrt(p.n)*2.2)*k,c=now-p.last<86400000?'var(--pink)':'var(--teal)';
-    var tip=p.place+' · '+p.n+' visit'+(p.n===1?'':'s')+(Object.keys(p.who).length?' · '+Object.keys(p.who).slice(0,4).join(', '):'')+(opt.sites?' · '+Object.keys(p.sites).slice(0,3).join(', '):'')+' · last '+ago(p.last);
-    return '<g><title>'+esc(tip)+'</title><circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+(r*2.2).toFixed(2)+'" fill="'+c+'" opacity=".16"/><circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+r.toFixed(2)+'" fill="'+c+'" stroke="#fff" stroke-width="'+(1.5*k).toFixed(2)+'"/></g>'}).join('');
+    var on=sel.length&&p.keys.some(function(x){return sel.indexOf(x)>-1}),cls=opt.pick?'pick'+(on?' sel':sel.length?' dim':''):'';
+    var tip=p.place+' · '+p.n+' visit'+(p.n===1?'':'s')+(Object.keys(p.who).length?' · '+Object.keys(p.who).slice(0,4).join(', '):'')+(opt.sites?' · '+Object.keys(p.sites).slice(0,3).join(', '):'')+' · last '+ago(p.last)+(opt.pick?(on?' · click to show all':' · click to filter'):'');
+    return '<g'+(opt.pick?' class="'+cls+'" tabindex="0" role="button" aria-pressed="'+(on?'true':'false')+'" data-locs="'+esc(p.keys.join('|'))+'" data-place="'+esc(p.place)+'"':'')+'><title>'+esc(tip)+'</title><circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+(r*2.2).toFixed(2)+'" fill="'+c+'" opacity=".16"/><circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+r.toFixed(2)+'" fill="'+c+'" stroke="#fff" stroke-width="'+(1.5*k).toFixed(2)+'"/></g>'}).join('');
   var cap=pts.length?'<span><i style="background:var(--pink)"></i>last 24h</span><span><i style="background:var(--teal)"></i>earlier</span><span>Approximate · network location</span>'+(noLoc?'<span>'+noLoc+' older visit'+(noLoc===1?'':'s')+' without location</span>':''):'<span>'+(sessions.length?'No locations yet: visits from now on get a dot':'No visits yet')+'</span>';
   return '<div class="vmap">'+(opt.title?'<div class="ttl">'+esc(opt.title)+'</div>':'')+'<svg viewBox="'+x0.toFixed(1)+' '+y0.toFixed(1)+' '+w.toFixed(1)+' '+h.toFixed(1)+'" role="img" aria-label="Visitor locations"><path class="land" vector-effect="non-scaling-stroke" d="'+W.d+'"/>'+dots+'</svg><div class="cap">'+cap+'</div></div>';
 }
@@ -314,11 +324,19 @@ function activity(b){
   var list=S.data.sessions.filter(function(s){return s.unlocked||s.gate});
   var vis=list; // every visit, including brief ones (no interaction)
   b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="aq" placeholder="Filter by site or recipient" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+creatorSelect('acr')+
-  '</div><div id="amap" style="padding:16px 14px 0"></div><div class="feed" id="feed"></div></div>';
-  function draw(){var q=S.q.toLowerCase();var all=vis.filter(function(s){return (!q||s.host.indexOf(q)>-1||(s.r||'').toLowerCase().indexOf(q)>-1)&&(!S.creator||creatorOf(s.host)===S.creator)}),f=all.slice(0,200);
-    $('amap').innerHTML=visitMap(all,{aspect:3.6,px:1100,sites:1,title:'Visitors · last '+rangeLabel(S.days)});
+  '<span id="aloc"></span></div><div id="amap" style="padding:16px 14px 0"></div><div class="feed" id="feed"></div></div>';
+  function draw(){var q=S.q.toLowerCase();var all=vis.filter(function(s){return (!q||s.host.indexOf(q)>-1||(s.r||'').toLowerCase().indexOf(q)>-1)&&(!S.creator||creatorOf(s.host)===S.creator)});
+    // the map keeps every dot so you can switch places; the feed narrows to the picked one
+    var f=(S.loc?all.filter(function(s){return S.loc.keys.indexOf(locKey(s))>-1}):all).slice(0,200);
+    $('amap').innerHTML=visitMap(all,{aspect:3.6,px:1100,sites:1,pick:1,sel:S.loc&&S.loc.keys,title:'Visitors · last '+rangeLabel(S.days)});
+    $('aloc').innerHTML=S.loc?'<span class="chip">📍 '+esc(S.loc.place)+'<button type="button" id="alocx" aria-label="Show all locations" title="Show all locations">×</button></span>':'';
     $('feed').innerHTML=f.length?f.map(function(s){return sessionCard(s,true)}).join(''):'<div class="empty">'+(S.data.sessions.length?'No matching activity.':'No activity yet. Once the tracker is on your sites, opens will show up here within seconds.')+'</div>'}
   draw();
+  function pick(g){var keys=g.getAttribute('data-locs').split('|');
+    S.loc=S.loc&&S.loc.keys.join('|')===keys.join('|')?null:{keys:keys,place:g.getAttribute('data-place')};draw()}
+  $('amap').onclick=function(e){var g=e.target.closest&&e.target.closest('g.pick');if(g)pick(g)};
+  $('amap').onkeydown=function(e){var g=e.target.closest&&e.target.closest('g.pick');if(g&&(e.key==='Enter'||e.key===' ')){e.preventDefault();pick(g)}};
+  $('aloc').onclick=function(e){if(e.target.id==='alocx'){S.loc=null;draw()}};
   $('aq').oninput=function(){S.q=this.value;draw()};
   if($('acr'))$('acr').onchange=function(){S.creator=this.value;ls('pp_creator',this.value||null);draw()};
 }
