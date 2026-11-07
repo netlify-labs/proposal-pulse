@@ -1,5 +1,5 @@
 # Proposal Pulse collector: public project.
-# Serves the tracker script (/t.js), receives beacons (/api/t) and org webhooks
+# Serves the tracker script (/t.js, a function serving public/tracker.js), receives beacons (/api/t) and org webhooks
 # (/hooks/netlify-site), and owns the Netlify Database (migrations in netlify/database).
 
 [build]
@@ -11,7 +11,7 @@
   external_node_modules = ["pg-native"]
 
 [[headers]]
-  for = "/t.js"
+  for = "/tracker.js"
   [headers.values]
     Cache-Control = "public, max-age=300"
     Access-Control-Allow-Origin = "*"

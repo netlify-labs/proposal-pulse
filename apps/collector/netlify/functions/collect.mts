@@ -4,8 +4,10 @@ import {
   composeAlert,
   env,
   forgetVisitor,
+  geoFrom,
   isValidEvent,
   postSlack,
+  privacySignal,
   trackedSiteForHost,
   type AlertSite,
   type AlertType,
@@ -52,17 +54,11 @@ export default async (req: Request, context: Context) => {
     }
     return done();
   }
-  // Global Privacy Control: t.js already stops, this covers older cached copies of it
-  if (req.headers.get("sec-gpc") === "1") return done();
+  // GPC / Do Not Track: t.js doesn't send beacons and /t.js records the load instead; this
+  // covers older cached copies of t.js, so those visits aren't recorded twice
+  if (privacySignal(req.headers)) return done();
 
-  const geo = {
-    city: context.geo?.city,
-    country: context.geo?.country?.name,
-    cc: context.geo?.country?.code,
-    tz: context.geo?.timezone,
-    lat: context.geo?.latitude,
-    lon: context.geo?.longitude,
-  };
+  const geo = geoFrom(context.geo);
   try {
     const { session, pending } = await recordBeacon(pool as unknown as Pool, ev, ua, geo, Date.now());
     if (pending.length) context.waitUntil(sendAlerts(session, pending, site).catch((e) => console.error("alert failed", e)));

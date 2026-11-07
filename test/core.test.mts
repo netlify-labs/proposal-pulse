@@ -9,8 +9,11 @@ import {
   openAlert,
   hotAlert,
   composeAlert,
+  geoFrom,
   linkId,
   linkTarget,
+  privacySignal,
+  refererPage,
   readOrgHook,
   signManageRequest,
   signNetlifyWebhook,
@@ -153,6 +156,34 @@ describe("collect less", () => {
     const s = newSession(ev("view"), "", {}, 0);
     applyEvent(s, ev("view", { r: "jane@acme.com" }), 0);
     expect(s.r).toBe("");
+  });
+});
+
+describe("privacy signals and server-recorded loads", () => {
+  test("GPC wins over DNT; nothing else counts", () => {
+    expect(privacySignal(new Headers({ "sec-gpc": "1", dnt: "1" }))).toBe("gpc");
+    expect(privacySignal(new Headers({ dnt: "1" }))).toBe("dnt");
+    expect(privacySignal(new Headers({ dnt: "0" }))).toBe("");
+    expect(privacySignal(new Headers())).toBe("");
+  });
+
+  test("the page comes from the Referer, which is often just the origin", () => {
+    expect(refererPage("https://Deal.Example.com/")).toEqual({ host: "deal.example.com", path: "/" });
+    expect(refererPage("https://deal.example.com/pricing?x=1")).toEqual({ host: "deal.example.com", path: "/pricing" });
+    expect(refererPage(null)).toBeNull();
+    expect(refererPage("about:blank")).toBeNull();
+  });
+
+  test("context.geo maps to the stored shape", () => {
+    expect(geoFrom({ city: "Austin", country: { code: "US", name: "United States" }, timezone: "America/Chicago", latitude: 30.27, longitude: -97.74 })).toEqual({
+      city: "Austin",
+      country: "United States",
+      cc: "US",
+      tz: "America/Chicago",
+      lat: 30.27,
+      lon: -97.74,
+    });
+    expect(geoFrom(undefined)).toEqual({});
   });
 });
 

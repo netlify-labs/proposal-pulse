@@ -1,7 +1,7 @@
 import { NetlifyDB } from "@netlify/database-dev";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
-import { claimAlert, recordBeacon, type Pool } from "../apps/collector/lib/visits.mts";
+import { claimAlert, recordBeacon, recordServerVisit, type Pool } from "../apps/collector/lib/visits.mts";
 import {
   audit,
   deleteVisits,
@@ -177,6 +177,18 @@ describe("opt-out", () => {
     const log = await pool.query("SELECT via, detail::text AS detail FROM audit_log WHERE action = 'visitor_opted_out' ORDER BY id DESC LIMIT 1");
     expect(log.rows[0].via).toBe("visitor");
     expect(log.rows[0].detail).not.toContain(vid);
+  });
+});
+
+describe("server-recorded loads (GPC / Do Not Track)", () => {
+  test("store location and device with the signal, and no reading data", async () => {
+    const s = await recordServerVisit(db, { host: site.host, path: "/" }, "Mozilla/5.0 (iPhone) Safari/604.1", { city: "Austin", cc: "US", lat: 30.27, lon: -97.74 }, 50_000, "gpc");
+    const { rows } = await pool.query("SELECT vid, data FROM sessions WHERE sid = $1", [s.sid]);
+    expect(rows[0].data).toMatchObject({ signal: "gpc", host: site.host, city: "Austin", cc: "US", lat: 30.3, lon: -97.7, device: "Mobile", unlocked: true, human: false, engagedMs: 0, clicks: [], alerts: [] });
+    expect(rows[0].vid).toMatch(/^[a-z0-9]{8,32}$/);
+    // not counted as a person
+    expect((await pool.query("SELECT count(*)::int n FROM visitors WHERE vid = $1", [rows[0].vid])).rows[0].n).toBe(0);
+    await pool.query("DELETE FROM sessions WHERE sid = $1", [s.sid]);
   });
 });
 

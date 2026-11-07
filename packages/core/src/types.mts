@@ -45,6 +45,12 @@ export type Session = {
   newVisitor: boolean;
   alerts: AlertType[];
   title: string;
+  /**
+   * Set when the server recorded this visit as t.js loaded, because the browser sends Global
+   * Privacy Control or Do Not Track and the tracker doesn't run. Location and device only: no
+   * read time, scroll or clicks, and it may be the password page. Each load is its own visit.
+   */
+  signal?: "gpc" | "dnt";
 };
 
 export type AlertType = "open" | "hot" | "deep";

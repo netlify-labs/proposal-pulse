@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import {
   applyEvent,
   newAlerts,
@@ -63,6 +64,25 @@ async function addVisitorContext(client: Db, s: Session) {
   s.visitNo = v.visits;
   const count = await client.query<{ n: number }>("SELECT count(*)::int AS n FROM visitors WHERE host = $1", [s.host]);
   s.visitorCount = count.rows[0].n;
+}
+
+/**
+ * Record a page load as a visit from the server alone (see Session.signal). No browser ID
+ * exists for these browsers, so each load gets its own random IDs and isn't counted as a
+ * person or a return visit, and no Slack alert fires.
+ */
+export async function recordServerVisit(db: Db, page: { host: string; path: string }, ua: string, geo: Geo, now: number, signal: "gpc" | "dnt") {
+  const id = () => now.toString(36) + randomBytes(6).toString("hex");
+  const ev: BeaconEvent = { k: "view", h: page.host, p: page.path, sid: id(), vid: id() };
+  const s = newSession(ev, ua, geo, now);
+  applyEvent(s, ev, now);
+  s.signal = signal;
+  await db.query(
+    `INSERT INTO sessions (sid, vid, host, started_at, last_at, data)
+     VALUES ($1, $2, $3, to_timestamp($4 / 1000.0), to_timestamp($4 / 1000.0), $5)`,
+    [s.sid, s.vid, s.host, now, JSON.stringify(s)],
+  );
+  return s;
 }
 
 /** True the first time an alert is claimed for a visit; the primary key makes it atomic. */

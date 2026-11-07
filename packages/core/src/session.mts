@@ -10,6 +10,28 @@ const HOST = /^[a-z0-9.-]{3,253}$/;
 /** Read time that triggers a "deep read" alert. */
 export const DEEP_READ_MS = 120_000;
 
+/**
+ * The browser's privacy signal from request headers: Global Privacy Control (Sec-GPC) or
+ * Do Not Track (DNT). t.js doesn't track these browsers; the server records the page load.
+ */
+export function privacySignal(headers: Headers): "gpc" | "dnt" | "" {
+  if (headers.get("sec-gpc") === "1") return "gpc";
+  if (headers.get("dnt") === "1") return "dnt";
+  return "";
+}
+
+/** Hostname and path of the page that loaded t.js, from the Referer header (often origin only). */
+export function refererPage(referer: string | null): { host: string; path: string } | null {
+  if (!referer) return null;
+  try {
+    const u = new URL(referer);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    return { host: u.hostname.toLowerCase(), path: u.pathname || "/" };
+  } catch {
+    return null;
+  }
+}
+
 export function isValidEvent(ev: unknown): ev is BeaconEvent {
   const e = ev as BeaconEvent;
   return !!e && typeof e === "object" && ID.test(e.sid) && ID.test(e.vid) && HOST.test(e.h || "");
@@ -43,6 +65,11 @@ export function parseUA(ua: string) {
 }
 
 export type Geo = { city?: string; country?: string; cc?: string; tz?: string; lat?: number; lon?: number };
+
+/** Netlify's `context.geo` (from the visitor's network) in the shape sessions store. */
+export function geoFrom(g: { city?: string; country?: { code?: string; name?: string }; timezone?: string; latitude?: number; longitude?: number } | undefined): Geo {
+  return { city: g?.city, country: g?.country?.name, cc: g?.country?.code, tz: g?.timezone, lat: g?.latitude, lon: g?.longitude };
+}
 
 /** Round a coordinate to 1 decimal (about 10 km), so stored locations stay city-level. */
 const coarse = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.round(n * 10) / 10 : null);
