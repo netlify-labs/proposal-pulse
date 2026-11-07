@@ -2,7 +2,18 @@ import { NetlifyDB } from "@netlify/database-dev";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { claimAlert, recordBeacon, type Pool } from "../apps/collector/lib/visits.mts";
-import { deleteVisits, forgetSite, getSiteRecord, listSiteRecords, trackedSiteForHost, upsertSite, type BeaconEvent, type Db } from "../packages/core/src/index.mts";
+import {
+  audit,
+  deleteVisits,
+  forgetSite,
+  forgetVisitor,
+  getSiteRecord,
+  listSiteRecords,
+  trackedSiteForHost,
+  upsertSite,
+  type BeaconEvent,
+  type Db,
+} from "../packages/core/src/index.mts";
 
 /**
  * Applies the real migrations and runs the apps' real queries.
@@ -137,23 +148,44 @@ describe("delete visits", () => {
     await recordBeacon(p, beacon("view", { sid, vid: "lz0delvis01" }), "", {}, 30_000);
     await recordBeacon(p, beacon("interact", { sid, vid: "lz0delvis01" }), "", {}, 31_000);
     await claimAlert(db, sid, "open");
-    expect(await deleteVisits(db, [sid])).toBe(1);
+    expect(await deleteVisits(db, [sid], "dashboard")).toBe(1);
     const left = await pool.query(
       "SELECT (SELECT count(*) FROM sessions WHERE sid = $1)::int s, (SELECT count(*) FROM alerts WHERE sid = $1)::int a, (SELECT count(*) FROM visitors WHERE vid = 'lz0delvis01')::int v",
       [sid],
     );
     expect(left.rows[0]).toEqual({ s: 0, a: 0, v: 0 });
+    const log = await pool.query("SELECT action, host, via, detail FROM audit_log WHERE action = 'visits_deleted' ORDER BY id DESC LIMIT 1");
+    expect(log.rows[0]).toMatchObject({ action: "visits_deleted", host: site.host, via: "dashboard", detail: { visits: 1 } });
   });
 });
 
-describe("forget", () => {
-  test("removes the project and all of its visit data", async () => {
-    await forgetSite(db, site.id);
-    expect(await getSiteRecord(db, site.id)).toBeNull();
-    const counts = await pool.query(
-      "SELECT (SELECT count(*) FROM sessions WHERE host = $1)::int s, (SELECT count(*) FROM visitors WHERE host = $1)::int v",
-      [site.host],
+describe("opt-out", () => {
+  test("deletes every visit from that browser to the site and logs only a count", async () => {
+    const p = pool as unknown as Pool;
+    const vid = "lz0optout01";
+    await recordBeacon(p, beacon("view", { sid: "lz0optses01", vid }), "", {}, 40_000);
+    await recordBeacon(p, beacon("interact", { sid: "lz0optses01", vid }), "", {}, 41_000);
+    await recordBeacon(p, beacon("view", { sid: "lz0optses02", vid }), "", {}, 42_000);
+    await recordBeacon(p, beacon("interact", { sid: "lz0optses02", vid }), "", {}, 43_000);
+    await claimAlert(db, "lz0optses01", "open");
+    expect(await forgetVisitor(db, site.host, vid)).toBe(2);
+    const left = await pool.query(
+      "SELECT (SELECT count(*) FROM sessions WHERE vid = $1)::int s, (SELECT count(*) FROM alerts WHERE sid LIKE 'lz0optses%')::int a, (SELECT count(*) FROM visitors WHERE vid = $1)::int v",
+      [vid],
     );
-    expect(counts.rows[0]).toEqual({ s: 0, v: 0 });
+    expect(left.rows[0]).toEqual({ s: 0, a: 0, v: 0 });
+    const log = await pool.query("SELECT via, detail::text AS detail FROM audit_log WHERE action = 'visitor_opted_out' ORDER BY id DESC LIMIT 1");
+    expect(log.rows[0].via).toBe("visitor");
+    expect(log.rows[0].detail).not.toContain(vid);
+  });
+});
+
+describe("audit log", () => {
+  test("records snippet changes and is untouched by the retention purge", async () => {
+    await audit(db, "snippet_added", { siteId: site.id, siteName: site.name, host: site.host, via: "webhook", detail: { snippetId: "7", html: "<script>" } });
+    const { rows } = await pool.query("SELECT action, site_id, via, detail FROM audit_log WHERE action = 'snippet_added' ORDER BY id DESC LIMIT 1");
+    expect(rows[0]).toMatchObject({ action: "snippet_added", site_id: site.id, via: "webhook", detail: { snippetId: "7", html: "<script>" } });
+    const fs = await import("node:fs");
+    expect(fs.readFileSync("./apps/collector/netlify/functions/cleanup.mts", "utf8")).not.toMatch(/DELETE FROM audit_log/);
   });
 });

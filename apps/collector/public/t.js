@@ -3,8 +3,11 @@
   "use strict";
   if (window.__proposalPulse) return;
   window.__proposalPulse = 1;
+  var noTrack = false;
   try {
     if (navigator.webdriver) return;
+    // Global Privacy Control / Do Not Track: record nothing (checked after the opt-out below)
+    noTrack = navigator.globalPrivacyControl === true || navigator.doNotTrack === "1" || window.doNotTrack === "1";
   } catch (e) {}
 
   var me = document.currentScript;
@@ -21,25 +24,50 @@
       return null;
     }
   }
+  function unstore(k) {
+    try {
+      localStorage.removeItem(k);
+    } catch (e) {}
+  }
   function rid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8).padEnd(6, "0");
   }
+  function post(body) {
+    return fetch(END, { method: "POST", body: body, keepalive: true, mode: "cors", credentials: "omit", headers: { "content-type": "text/plain" } }).catch(function () {});
+  }
+
+  var q = new URLSearchParams(location.search);
+
+  // Opt out: any page URL with ?pp_optout stops tracking in this browser for this site and
+  // asks the collector to delete what it already recorded. Nothing is shown on the page.
+  if (q.has("pp_optout")) {
+    var old = store("localStorage", "_pp_v");
+    store("localStorage", "_pp_off", "1");
+    unstore("_pp_v");
+    unstore("_pp_r");
+    if (old) post(JSON.stringify({ k: "optout", h: location.hostname, sid: rid(), vid: old }));
+    return;
+  }
+  if (noTrack || store("localStorage", "_pp_off") === "1") return;
+
   var vid = store("localStorage", "_pp_v") || rid();
   store("localStorage", "_pp_v", vid);
   var sid = store("sessionStorage", "_pp_s") || rid();
   store("sessionStorage", "_pp_s", sid);
 
-  var q = new URLSearchParams(location.search);
+  // link ID from a unique link (?r=...); never an email address
   var r = (q.get("r") || q.get("to") || "").slice(0, 60);
+  if (r.indexOf("@") > -1) r = "";
   if (r) store("localStorage", "_pp_r", r);
   else r = store("localStorage", "_pp_r") || "";
+  if (r.indexOf("@") > -1) r = "";
 
-  var isGate = document.title === "Password Protection" && !!document.querySelector('input[type="password"][name="password"]');
-  var gate = isGate ? (document.querySelector(".alert-box") ? 2 : 1) : 0;
+  // Netlify password page: only whether it was shown, never attempts or input
+  var gate = document.title === "Password Protection" && !!document.querySelector('input[type="password"][name="password"]') ? 1 : 0;
 
   var queue = Promise.resolve();
   function base(k) {
-    return { k: k, h: location.hostname, p: location.pathname, sid: sid, vid: vid, r: r || undefined, gate: gate || undefined };
+    return { v: 2, k: k, h: location.hostname, p: location.pathname, sid: sid, vid: vid, r: r || undefined, gate: gate || undefined };
   }
   function send(k, extra, beacon) {
     var ev = base(k);
@@ -51,11 +79,25 @@
       } catch (e) {}
     }
     queue = queue.then(function () {
-      return fetch(END, { method: "POST", body: body, keepalive: true, mode: "cors", credentials: "omit", headers: { "content-type": "text/plain" } }).catch(function () {});
+      return post(body);
     });
   }
+  /** Where a link goes, without query string or fragment; mailto/tel links keep only the scheme. */
+  function linkTarget(href) {
+    if (!href) return "";
+    try {
+      var u = new URL(href, location.href);
+      if (u.protocol === "mailto:" || u.protocol === "tel:") return u.protocol;
+      if (u.protocol === "http:" || u.protocol === "https:") return u.origin + u.pathname;
+    } catch (e) {}
+    return "";
+  }
+  var ref = "";
+  try {
+    ref = document.referrer ? new URL(document.referrer).origin : "";
+  } catch (e) {}
 
-  send("view", { ref: document.referrer || undefined, ti: document.title });
+  send("view", { ref: ref || undefined, ti: document.title });
   if (gate) return; // on the password page only the view is recorded
 
   // ---------- engagement time ----------
@@ -120,8 +162,9 @@
     function (e) {
       var el = e.target && e.target.closest && e.target.closest('a,button,[role="button"],[role="tab"],summary,[data-track],select,label');
       if (!el) return;
-      var label = (el.getAttribute("data-track") || el.getAttribute("aria-label") || el.innerText || el.title || el.getAttribute("href") || "").trim();
-      var href = el.tagName === "A" ? el.href || el.getAttribute("href") || "" : "";
+      // labels the page author set on purpose only; never the element's visible text
+      var label = (el.getAttribute("data-track") || el.getAttribute("aria-label") || "").trim();
+      var href = el.tagName === "A" ? linkTarget(el.getAttribute("href")) : "";
       tick();
       send("click", { l: label.slice(0, 80), u: href || undefined, sc: maxScroll, ms: engaged });
       engaged = 0;

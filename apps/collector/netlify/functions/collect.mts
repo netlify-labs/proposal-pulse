@@ -3,6 +3,7 @@ import {
   BOT_UA,
   composeAlert,
   env,
+  forgetVisitor,
   isValidEvent,
   postSlack,
   trackedSiteForHost,
@@ -41,6 +42,18 @@ export default async (req: Request, context: Context) => {
   const site = await trackedSiteForHost(db, ev.h);
   if (!site) return done(); // not a tracked project: drop silently
   ev.h = site.host; // custom domains and aliases map to one canonical host
+
+  if (ev.k === "optout") {
+    try {
+      await forgetVisitor(db, site.host, ev.vid);
+    } catch (e) {
+      console.error("opt-out failed", e);
+      return done(500);
+    }
+    return done();
+  }
+  // Global Privacy Control: t.js already stops, this covers older cached copies of it
+  if (req.headers.get("sec-gpc") === "1") return done();
 
   const geo = {
     city: context.geo?.city,

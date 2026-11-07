@@ -10,9 +10,9 @@ Setting it up with an AI coding agent? Go to [Setup](#setup).
 - **🔥 Hot visits:** someone read to the end and clicked, or came back for another visit.
 - **Visitor maps:** every visitor on one map, and each proposal's visitors in its slide-out, zoomed to fit. Drawn from a built-in world outline, so no map service sees visitor locations.
 - **Thumbnails and creators:** each proposal shows Netlify's screenshot of its latest production deploy (click it to open the site) and who created it, with a creator filter.
-- **Personal links:** add `?r=jane` to a link and every visit from that browser is labelled "jane", even if she comes back without the parameter.
+- **Unique links:** the dashboard's Link builder generates a unique URL for each send (`?r=k7x2m9qa`, a random ID). Every visit from that browser is labelled with the ID, even when it comes back without the parameter. Names and emails never go in the URL.
 - **Forward detection:** a new browser opening the same project shows up as "new person opened".
-- **Password-protected projects:** visits to the Netlify password page are recorded separately, including wrong attempts.
+- **Password-protected projects:** visits to the Netlify password page are recorded separately. Password attempts are not.
 - **Slack alerts (optional):** first open, return visit, possible forward, 🔥 read to the end and clicked, and reads over 2 minutes.
 - **Hands-off enrollment:** a new project in your teams gets the tracker within seconds of being created, and existing projects on their next production deploy. Untrack a project once and it stays untracked.
 
@@ -65,7 +65,18 @@ flowchart LR
 
 ### Data and privacy
 
-The tracker sets no cookies and the collector stores no IP addresses. It keeps a random browser ID in `localStorage` and a tab session ID in `sessionStorage`. Location (city, country, timezone, and coordinates rounded to about 10 km for the maps) comes from Netlify's edge geolocation, which is based on the visitor's network, so VPNs and corporate proxies can place people in the wrong city. Visits older than `RETENTION_DAYS` (default 180) are deleted daily. Check whether your consent requirements apply to this kind of analytics before you track projects shared with people in regulated regions.
+The tracker sets no cookies and the collector stores no IP addresses. It keeps a random browser ID in `localStorage` and a tab session ID in `sessionStorage`.
+
+What it records, and what it leaves out:
+
+- **Clicks:** where a link goes, as origin and path only (no query string or fragment). `mailto:` and `tel:` links record only that kind of link, not the address or number. Button and link text is never recorded; a click has a label only if the page sets `data-track` or `aria-label` on the element.
+- **Referrer:** the referring site's hostname only.
+- **Password page:** whether a visit saw the Netlify password page. Attempts are not counted, and nothing typed is read.
+- **Link IDs:** the `?r=` value from a unique link. Values that look like an email address are dropped.
+- **Global Privacy Control and Do Not Track:** browsers that send either are not tracked at all, and the collector ignores beacons that carry `Sec-GPC: 1`.
+- **Opt-out:** opening any tracked page with `?pp_optout` (for example `https://proposal.example.com/?pp_optout`) stops tracking in that browser for that site and deletes the visits already recorded from it. Nothing is shown on the page, so link to it from your privacy notice.
+
+Location (city, country, timezone, and coordinates rounded to about 10 km for the maps) comes from Netlify's edge geolocation, which is based on the visitor's network, so VPNs and corporate proxies can place people in the wrong city. Visits older than `RETENTION_DAYS` (default 180) are deleted daily. Check whether your consent requirements apply to this kind of analytics before you track projects shared with people in regulated regions.
 
 ## Requirements
 
@@ -307,11 +318,11 @@ Optional. The collector posts to one Slack channel when a tracked proposal is:
 - **read to the end and clicked** (🔥, the same rule as the dashboard's hot visits);
 - **read for 2+ minutes**.
 
-Each alert fires at most once per visit and is two short lines: the proposal, who created it and what happened, then the recipient (from a personal link), place and details, with a link to the proposal's page in the dashboard:
+Each alert fires at most once per visit and is two short lines: the proposal, who created it and what happened, then the link ID (from a unique link), place and details, with a link to the proposal's page in the dashboard:
 
 ```
 🔥 *acme-proposal* · by Jane Doe · read to the end and clicked
-London, GB · 3m 16s · 31 clicks → https://<dashboard>/#site=acme-proposal.netlify.app
+*k7x2m9qa* · London, GB · 3m 16s · 31 clicks → https://<dashboard>/#site=acme-proposal.netlify.app
 ```
 
 Alerts link to the dashboard rather than the proposal, so Slack doesn't expand proposal previews in the channel. Proposal Pulse accepts either kind of Slack webhook and detects which one from the URL.
@@ -358,6 +369,7 @@ Netlify Functions read environment variables at deploy time: redeploy a project 
 - **Remove your own or test visits:** click **Delete** under the time on any visit in Activity or a proposal's slide-out. The visit, its alert markers and any visitor record left with no visits are removed.
 - **A tracked project was deleted:** select it and click **Forget**. Its visit data is removed too.
 - **Pause Slack alerts:** set `SLACK_ALERTS=off` on the collector and redeploy. Alerts that would have fired meanwhile are marked as sent, so resuming does not flood the channel.
+- **Audit log:** every snippet Proposal Pulse adds, updates or removes on a live project (Snippet Injection changes a site with no deploy to show for it), every **Forget**, every visit deletion and every visitor opt-out is written to the `audit_log` table with the time, the project, where it came from (`webhook`, `dashboard` or `visitor`) and, for snippet changes, the snippet HTML. The retention job never deletes from it. Query it with `SELECT * FROM audit_log ORDER BY at DESC`. Dashboard actions are recorded as `dashboard`, not by person.
 - **Webhook health:** **Setup > Org webhook** shows the last delivery and per-outcome counts for 24 hours. Every org event is logged, including other teams' (`ignored`).
 - **Rotate the database credentials:** repeat step 7 and redeploy the dashboard.
 - **Keep `HOOK_SECRET` unchanged.** The org webhooks sign every delivery with it. If you change it on the projects, an Organization Owner must run step 10 again with the new value, or the collector rejects every delivery as a bad signature.

@@ -9,6 +9,8 @@ import {
   openAlert,
   hotAlert,
   composeAlert,
+  linkId,
+  linkTarget,
   readOrgHook,
   signManageRequest,
   signNetlifyWebhook,
@@ -70,7 +72,7 @@ describe("session folding and alerts", () => {
     expect(newAlerts(s, ev("interact"))).toEqual(["open"]);
     expect(newAlerts(s, ev("interact"))).toEqual([]); // once per session
 
-    const click = ev("click", { l: "Book a call", u: "https://calendly.com/acme/30min" });
+    const click = ev("click", { v: 2, l: "Book a call", u: "https://calendly.com/acme/30min" });
     applyEvent(s, click, 2);
     expect(newAlerts(s, click)).toEqual([]); // clicked, but hasn't reached the end yet
     expect(s.clicks.at(-1)).toMatchObject({ label: "Book a call", href: "https://calendly.com/acme/30min" });
@@ -80,6 +82,13 @@ describe("session folding and alerts", () => {
     expect(newAlerts(s, ev("hb"))).toEqual(["deep"]);
     expect(s.ref).toBe("mail.google.com");
     expect(s.maxScroll).toBe(80);
+  });
+
+  test("wrong password attempts are not counted (older trackers send gate: 2)", () => {
+    const s = newSession(ev("view", { gate: 2 }), "", {}, 0);
+    applyEvent(s, ev("view", { gate: 2 }), 0);
+    expect(s.gate).toBe(true);
+    expect(s).not.toHaveProperty("wrongPw");
   });
 
   test("engaged time per report is capped at 30s", () => {
@@ -115,6 +124,35 @@ describe("signed admin requests (dashboard -> collector)", () => {
     expect(readManageRequest(body, signature, SECRET, 1_000_000 + 6 * 60_000)).toBeNull();
     const bad = signManageRequest({ op: "drop" as any }, SECRET, 1_000_000);
     expect(readManageRequest(bad.body, bad.signature, SECRET, 1_000_000)).toBeNull();
+  });
+});
+
+describe("collect less", () => {
+  test("click links lose query strings and fragments; mailto/tel keep only the scheme", () => {
+    expect(linkTarget("https://acme.com/pricing?email=jane@acme.com&deal=42#top")).toBe("https://acme.com/pricing");
+    expect(linkTarget("mailto:jane@acme.com?subject=Deal")).toBe("mailto:");
+    expect(linkTarget("tel:+15551234567")).toBe("tel:");
+    expect(linkTarget("javascript:void(0)")).toBe("");
+    expect(linkTarget("not a url")).toBe("");
+    expect(linkTarget(undefined)).toBe("");
+  });
+
+  test("click labels are kept only from v2 trackers (author-set labels), never older visible text", () => {
+    const s = newSession(ev("view"), "", {}, 0);
+    applyEvent(s, ev("click", { l: "Email Jane Smith", u: "mailto:jane@acme.com" }), 1);
+    applyEvent(s, ev("click", { v: 2, l: "Pricing CTA", u: "https://acme.com/p?x=1" }), 2);
+    expect(s.clicks).toEqual([
+      { t: 1, label: "", href: "mailto:" },
+      { t: 2, label: "Pricing CTA", href: "https://acme.com/p" },
+    ]);
+  });
+
+  test("link IDs that are email addresses are dropped", () => {
+    expect(linkId("k7x2m9qa")).toBe("k7x2m9qa");
+    expect(linkId("jane@acme.com")).toBe("");
+    const s = newSession(ev("view"), "", {}, 0);
+    applyEvent(s, ev("view", { r: "jane@acme.com" }), 0);
+    expect(s.r).toBe("");
   });
 });
 
