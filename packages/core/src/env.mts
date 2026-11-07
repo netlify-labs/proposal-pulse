@@ -18,6 +18,15 @@ export const envList = (key: string): string[] =>
 /** Team slugs whose projects get the tracker. Empty means nothing is tracked. */
 export const pulseTeams = () => envList("PULSE_TEAMS");
 
+/**
+ * True when a project name contains any word in PULSE_EXCLUDE (comma-separated, case-insensitive),
+ * e.g. PULSE_EXCLUDE=revops,internal. Matching projects are never tracked.
+ */
+export const isExcludedName = (name: string, words: string[] = envList("PULSE_EXCLUDE")) => {
+  const n = name.toLowerCase();
+  return words.some((w) => n.includes(w.toLowerCase()));
+};
+
 export const stripSlash = (url: string) => url.replace(/\/+$/, "");
 
 /** This project's production URL. Netlify sets URL for every function; no config needed. */
