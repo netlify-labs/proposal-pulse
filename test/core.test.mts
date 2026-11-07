@@ -9,6 +9,8 @@ import {
   openAlert,
   hotAlert,
   composeAlert,
+  linkId,
+  linkTarget,
   readOrgHook,
   signManageRequest,
   signNetlifyWebhook,
@@ -70,7 +72,7 @@ describe("session folding and alerts", () => {
     expect(newAlerts(s, ev("interact"))).toEqual(["open"]);
     expect(newAlerts(s, ev("interact"))).toEqual([]); // once per session
 
-    const click = ev("click", { l: "Book a call", u: "https://calendly.com/acme/30min" });
+    const click = ev("click", { v: 2, l: "Book a call", u: "https://calendly.com/acme/30min" });
     applyEvent(s, click, 2);
     expect(newAlerts(s, click)).toEqual([]); // clicked, but hasn't reached the end yet
     expect(s.clicks.at(-1)).toMatchObject({ label: "Book a call", href: "https://calendly.com/acme/30min" });
@@ -80,6 +82,13 @@ describe("session folding and alerts", () => {
     expect(newAlerts(s, ev("hb"))).toEqual(["deep"]);
     expect(s.ref).toBe("mail.google.com");
     expect(s.maxScroll).toBe(80);
+  });
+
+  test("wrong password attempts are not counted (older trackers send gate: 2)", () => {
+    const s = newSession(ev("view", { gate: 2 }), "", {}, 0);
+    applyEvent(s, ev("view", { gate: 2 }), 0);
+    expect(s.gate).toBe(true);
+    expect(s).not.toHaveProperty("wrongPw");
   });
 
   test("engaged time per report is capped at 30s", () => {
@@ -118,6 +127,35 @@ describe("signed admin requests (dashboard -> collector)", () => {
   });
 });
 
+describe("collect less", () => {
+  test("click links lose query strings and fragments; mailto/tel keep only the scheme", () => {
+    expect(linkTarget("https://acme.com/pricing?email=jane@acme.com&deal=42#top")).toBe("https://acme.com/pricing");
+    expect(linkTarget("mailto:jane@acme.com?subject=Deal")).toBe("mailto:");
+    expect(linkTarget("tel:+15551234567")).toBe("tel:");
+    expect(linkTarget("javascript:void(0)")).toBe("");
+    expect(linkTarget("not a url")).toBe("");
+    expect(linkTarget(undefined)).toBe("");
+  });
+
+  test("click labels are kept only from v2 trackers (author-set labels), never older visible text", () => {
+    const s = newSession(ev("view"), "", {}, 0);
+    applyEvent(s, ev("click", { l: "Email Jane Smith", u: "mailto:jane@acme.com" }), 1);
+    applyEvent(s, ev("click", { v: 2, l: "Pricing CTA", u: "https://acme.com/p?x=1" }), 2);
+    expect(s.clicks).toEqual([
+      { t: 1, label: "", href: "mailto:" },
+      { t: 2, label: "Pricing CTA", href: "https://acme.com/p" },
+    ]);
+  });
+
+  test("link IDs that are email addresses are dropped", () => {
+    expect(linkId("k7x2m9qa")).toBe("k7x2m9qa");
+    expect(linkId("jane@acme.com")).toBe("");
+    const s = newSession(ev("view"), "", {}, 0);
+    applyEvent(s, ev("view", { r: "jane@acme.com" }), 0);
+    expect(s.r).toBe("");
+  });
+});
+
 describe("🔥 alert and Slack format", () => {
   test("read to the end and clicked fires 🔥 once", () => {
     const s = newSession(ev("view"), "", {}, 0);
@@ -131,24 +169,26 @@ describe("🔥 alert and Slack format", () => {
     expect(newAlerts(s, ev("click"))).toEqual([]);
   });
 
-  test("two compact lines with creator and a dashboard link only", () => {
-    const s = { ...newSession(ev("view"), "", { city: "London", cc: "GB" }, 0), r: "jane", engagedMs: 196_000, clicks: [{ t: 0, label: "a" }, { t: 0, label: "b" }] };
-    expect(hotAlert(s, "https://dash.example.com/", { createdByName: "Marina" })).toBe(
-      ":fire: *deal.example.com* · by Marina · read to the end and clicked\n*jane* · London, GB · 3m 16s · 2 clicks → https://dash.example.com/#site=deal.example.com",
+  test("one line: proposal, alert type and a dashboard link; no recipient, place or details", () => {
+    const s = { ...newSession(ev("view"), "", { city: "London", cc: "GB" }, 0), r: "k7x2m9qa", ref: "mail.google.com", engagedMs: 196_000, clicks: [{ t: 0, label: "a" }, { t: 0, label: "b" }] };
+    expect(hotAlert(s, "https://dash.example.com/")).toBe(":fire: *deal.example.com* · read to the end and clicked → https://dash.example.com/#site=deal.example.com");
+    expect(openAlert({ ...s, newVisitor: true, visitorCount: 1 }, "https://dash.example.com")).toBe(":eyes: *deal.example.com* · opened → https://dash.example.com/#site=deal.example.com");
+    expect(openAlert({ ...s, newVisitor: true, visitorCount: 3 }, "https://dash.example.com")).toBe(
+      ":busts_in_silhouette: *deal.example.com* · new person opened it (possible forward) → https://dash.example.com/#site=deal.example.com",
     );
-    expect(openAlert({ ...s, r: "", newVisitor: true, visitorCount: 1 }, "https://dash.example.com", {})).toBe(
-      ":eyes: *deal.example.com* · opened (first visit)\nLondon, GB → https://dash.example.com/#site=deal.example.com",
-    );
+    for (const text of [hotAlert(s, "https://d.test"), openAlert(s, "https://d.test")]) {
+      expect(text).not.toMatch(/k7x2m9qa|London|GB|mail\.google|3m/);
+    }
   });
 });
 
 test("alerts earned together become one message led by the strongest", () => {
   const base = { ...newSession(ev("view"), "", { city: "Atlanta", cc: "US" }, 0), engagedMs: 3000, clicks: [{ t: 0, label: "a" }] };
-  expect(composeAlert({ ...base, newVisitor: false, visitNo: 2 }, ["open", "hot"], "https://dash.test", { createdByName: "Ricky" })).toBe(
-    ":fire: *deal.example.com* · by Ricky · read to the end and clicked · came back (visit #2)\nAtlanta, US · 3s · 1 click → https://dash.test/#site=deal.example.com",
+  expect(composeAlert({ ...base, newVisitor: false, visitNo: 2 }, ["open", "hot"], "https://dash.test")).toBe(
+    ":fire: *deal.example.com* · read to the end and clicked · came back → https://dash.test/#site=deal.example.com",
   );
   // a plain first-visit open adds nothing next to 🔥
   expect(composeAlert({ ...base, newVisitor: true, visitorCount: 1 }, ["open", "hot"], "https://dash.test")).toBe(
-    ":fire: *deal.example.com* · read to the end and clicked\nAtlanta, US · 3s · 1 click → https://dash.test/#site=deal.example.com",
+    ":fire: *deal.example.com* · read to the end and clicked → https://dash.test/#site=deal.example.com",
   );
 });

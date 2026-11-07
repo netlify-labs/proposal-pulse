@@ -5,6 +5,7 @@ import { db } from "../../lib/db.mts";
 /**
  * Daily data retention. Deletes visits older than RETENTION_DAYS (default 180), visitors with
  * no remaining visits, old alert markers, and webhook log entries older than 30 days.
+ * The audit_log table is deliberately never purged.
  */
 export default async () => {
   const days = Math.max(1, Number(env("RETENTION_DAYS")) || 180);

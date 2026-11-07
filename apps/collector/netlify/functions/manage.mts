@@ -62,7 +62,7 @@ export default async (req: Request, context: Context) => {
 
     if (r.op === "delete-visits") {
       const sids = (r.ids || []).filter((x) => /^[a-z0-9]{8,32}$/.test(x)).slice(0, 500);
-      return json({ deleted: await deleteVisits(db, sids) });
+      return json({ deleted: await deleteVisits(db, sids, "dashboard") });
     }
 
     if (r.op === "track") {
@@ -87,8 +87,8 @@ export default async (req: Request, context: Context) => {
     const results = [];
     for (const id of (r.ids || []).slice(0, 200)) {
       try {
-        if (r.op === "untrack") await untrackSite(db, id);
-        else await forgetSite(db, id);
+        if (r.op === "untrack") await untrackSite(db, id, "dashboard");
+        else await forgetSite(db, id, "dashboard");
         results.push({ id, ok: true });
       } catch (e: any) {
         results.push({ id, ok: false, error: String(e?.message || e) });

@@ -3,10 +3,10 @@ import {
   BOT_UA,
   composeAlert,
   env,
+  forgetVisitor,
   isValidEvent,
   postSlack,
   trackedSiteForHost,
-  type AlertSite,
   type AlertType,
   type BeaconEvent,
   type Session,
@@ -42,6 +42,18 @@ export default async (req: Request, context: Context) => {
   if (!site) return done(); // not a tracked project: drop silently
   ev.h = site.host; // custom domains and aliases map to one canonical host
 
+  if (ev.k === "optout") {
+    try {
+      await forgetVisitor(db, site.host, ev.vid);
+    } catch (e) {
+      console.error("opt-out failed", e);
+      return done(500);
+    }
+    return done();
+  }
+  // Global Privacy Control: t.js already stops, this covers older cached copies of it
+  if (req.headers.get("sec-gpc") === "1") return done();
+
   const geo = {
     city: context.geo?.city,
     country: context.geo?.country?.name,
@@ -52,7 +64,7 @@ export default async (req: Request, context: Context) => {
   };
   try {
     const { session, pending } = await recordBeacon(pool as unknown as Pool, ev, ua, geo, Date.now());
-    if (pending.length) context.waitUntil(sendAlerts(session, pending, site).catch((e) => console.error("alert failed", e)));
+    if (pending.length) context.waitUntil(sendAlerts(session, pending).catch((e) => console.error("alert failed", e)));
   } catch (e) {
     console.error("collect failed", e);
     return done(500);
@@ -60,12 +72,12 @@ export default async (req: Request, context: Context) => {
   return done();
 };
 
-async function sendAlerts(s: Session, types: AlertType[], site: AlertSite) {
+async function sendAlerts(s: Session, types: AlertType[]) {
   const dashboard = env("DASHBOARD_URL");
   // claim each alert once per visit, then post one combined message for everything claimed together
   const claimed: AlertType[] = [];
   for (const type of types) if (await claimAlert(db, s.sid, type)) claimed.push(type);
-  if (claimed.length) await postSlack(composeAlert(s, claimed, dashboard, site));
+  if (claimed.length) await postSlack(composeAlert(s, claimed, dashboard));
 }
 
 export const config: Config = {

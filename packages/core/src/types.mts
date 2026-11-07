@@ -1,4 +1,7 @@
-/** One click on a link or button on a tracked page. */
+/**
+ * One click on a link or button on a tracked page. `label` is only what the page author set
+ * (data-track or aria-label), never visible text; `href` has no query string or fragment.
+ */
 export type Click = { t: number; label: string; href?: string };
 
 /**
@@ -9,14 +12,15 @@ export type Session = {
   sid: string;
   vid: string;
   host: string;
-  /** Recipient label from the personal link (`?r=jane`), if any. */
+  /** Link ID from a unique link (`?r=k7x2m9qa`), if any. Never an email address. */
   r: string;
   start: number;
   last: number;
   paths: string[];
   /** Saw the Netlify password page. */
   gate: boolean;
-  wrongPw: number;
+  /** Visits recorded before wrong password attempts stopped being counted; no longer written. */
+  wrongPw?: number;
   /** Saw real content (got past any password page). */
   unlocked: boolean;
   /** Showed human engagement (click, keypress, 8s+ engaged, or 20%+ scroll). */
@@ -47,7 +51,10 @@ export type AlertType = "open" | "hot" | "deep";
 
 /** Beacon sent by t.js. Short keys keep the payload small. */
 export type BeaconEvent = {
-  k: "view" | "hb" | "click" | "section" | "leave" | "interact";
+  /** Tracker version. 2+ sends click labels only from data-track/aria-label. */
+  v?: number;
+  /** `optout` asks to delete this browser's visits to the site (see t.js `?pp_optout`). */
+  k: "view" | "hb" | "click" | "section" | "leave" | "interact" | "optout";
   /** hostname */
   h: string;
   /** path */
@@ -55,7 +62,7 @@ export type BeaconEvent = {
   sid: string;
   vid: string;
   r?: string;
-  /** 0 content, 1 password page, 2 password page after a wrong attempt */
+  /** 0 content, 1 password page (older trackers send 2 after a wrong attempt; treated as 1) */
   gate?: 0 | 1 | 2;
   /** engaged ms since the last report */
   ms?: number;
