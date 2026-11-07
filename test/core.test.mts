@@ -169,26 +169,24 @@ describe("🔥 alert and Slack format", () => {
     expect(newAlerts(s, ev("click"))).toEqual([]);
   });
 
-  test("one line: proposal, alert type and a dashboard link; no recipient, place or details", () => {
-    const s = { ...newSession(ev("view"), "", { city: "London", cc: "GB" }, 0), r: "k7x2m9qa", ref: "mail.google.com", engagedMs: 196_000, clicks: [{ t: 0, label: "a" }, { t: 0, label: "b" }] };
-    expect(hotAlert(s, "https://dash.example.com/")).toBe(":fire: *deal.example.com* · read to the end and clicked → https://dash.example.com/#site=deal.example.com");
-    expect(openAlert({ ...s, newVisitor: true, visitorCount: 1 }, "https://dash.example.com")).toBe(":eyes: *deal.example.com* · opened → https://dash.example.com/#site=deal.example.com");
-    expect(openAlert({ ...s, newVisitor: true, visitorCount: 3 }, "https://dash.example.com")).toBe(
-      ":busts_in_silhouette: *deal.example.com* · new person opened it (possible forward) → https://dash.example.com/#site=deal.example.com",
+  test("two compact lines with creator and a dashboard link only", () => {
+    const s = { ...newSession(ev("view"), "", { city: "London", cc: "GB" }, 0), r: "jane", engagedMs: 196_000, clicks: [{ t: 0, label: "a" }, { t: 0, label: "b" }] };
+    expect(hotAlert(s, "https://dash.example.com/", { createdByName: "Marina" })).toBe(
+      ":fire: *deal.example.com* · by Marina · read to the end and clicked\n*jane* · London, GB · 3m 16s · 2 clicks → https://dash.example.com/#site=deal.example.com",
     );
-    for (const text of [hotAlert(s, "https://d.test"), openAlert(s, "https://d.test")]) {
-      expect(text).not.toMatch(/k7x2m9qa|London|GB|mail\.google|3m/);
-    }
+    expect(openAlert({ ...s, r: "", newVisitor: true, visitorCount: 1 }, "https://dash.example.com", {})).toBe(
+      ":eyes: *deal.example.com* · opened (first visit)\nLondon, GB → https://dash.example.com/#site=deal.example.com",
+    );
   });
 });
 
 test("alerts earned together become one message led by the strongest", () => {
   const base = { ...newSession(ev("view"), "", { city: "Atlanta", cc: "US" }, 0), engagedMs: 3000, clicks: [{ t: 0, label: "a" }] };
-  expect(composeAlert({ ...base, newVisitor: false, visitNo: 2 }, ["open", "hot"], "https://dash.test")).toBe(
-    ":fire: *deal.example.com* · read to the end and clicked · came back → https://dash.test/#site=deal.example.com",
+  expect(composeAlert({ ...base, newVisitor: false, visitNo: 2 }, ["open", "hot"], "https://dash.test", { createdByName: "Ricky" })).toBe(
+    ":fire: *deal.example.com* · by Ricky · read to the end and clicked · came back (visit #2)\nAtlanta, US · 3s · 1 click → https://dash.test/#site=deal.example.com",
   );
   // a plain first-visit open adds nothing next to 🔥
   expect(composeAlert({ ...base, newVisitor: true, visitorCount: 1 }, ["open", "hot"], "https://dash.test")).toBe(
-    ":fire: *deal.example.com* · read to the end and clicked → https://dash.test/#site=deal.example.com",
+    ":fire: *deal.example.com* · read to the end and clicked\nAtlanta, US · 3s · 1 click → https://dash.test/#site=deal.example.com",
   );
 });

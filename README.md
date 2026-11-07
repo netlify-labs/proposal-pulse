@@ -13,7 +13,7 @@ Setting it up with an AI coding agent? Go to [Setup](#setup).
 - **Unique links:** the dashboard's Link builder generates a unique URL for each send (`?r=k7x2m9qa`, a random ID). Every visit from that browser is labelled with the ID, even when it comes back without the parameter. Names and emails never go in the URL.
 - **Forward detection:** a new browser opening the same project shows up as "new person opened".
 - **Password-protected projects:** visits to the Netlify password page are recorded separately. Password attempts are not.
-- **Slack alerts (optional):** first open, return visit, possible forward, 🔥 read to the end and clicked, and reads over 2 minutes. Each alert is just the proposal, the alert type and a dashboard link.
+- **Slack alerts (optional):** first open, return visit, possible forward, 🔥 read to the end and clicked, and reads over 2 minutes.
 - **Hands-off enrollment:** a new project in your teams gets the tracker within seconds of being created, and existing projects on their next production deploy. Untrack a project once and it stays untracked.
 
 ## How it works
@@ -318,13 +318,14 @@ Optional. The collector posts to one Slack channel when a tracked proposal is:
 - **read to the end and clicked** (🔥, the same rule as the dashboard's hot visits);
 - **read for 2+ minutes**.
 
-Each alert fires at most once per visit and is one line: the proposal, the alert type and a link to the proposal's page in the dashboard:
+Each alert fires at most once per visit and is two short lines: the proposal, who created it and what happened, then the link ID (from a unique link), place and details, with a link to the proposal's page in the dashboard:
 
 ```
-🔥 *acme-proposal* · read to the end and clicked → https://<dashboard>/#site=acme-proposal.netlify.app
+🔥 *acme-proposal* · by Jane Doe · read to the end and clicked
+*k7x2m9qa* · London, GB · 3m 16s · 31 clicks → https://<dashboard>/#site=acme-proposal.netlify.app
 ```
 
-Who opened it, from where, and the reading details stay in the dashboard, behind its access control and the `RETENTION_DAYS` purge. Slack messages are outside both, so alerts carry nothing about the visitor. Post them to a private channel. Alerts link to the dashboard rather than the proposal, so Slack doesn't expand proposal previews in the channel. Proposal Pulse accepts either kind of Slack webhook and detects which one from the URL.
+Alerts link to the dashboard rather than the proposal, so Slack doesn't expand proposal previews in the channel. Proposal Pulse accepts either kind of Slack webhook and detects which one from the URL.
 
 | | Workflow Builder webhook | Incoming Webhook (Slack app) |
 |---|---|---|
