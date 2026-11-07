@@ -9,6 +9,7 @@ import {
   openAlert,
   hotAlert,
   composeAlert,
+  isExcludedName,
   readOrgHook,
   signManageRequest,
   signNetlifyWebhook,
@@ -151,4 +152,15 @@ test("alerts earned together become one message led by the strongest", () => {
   expect(composeAlert({ ...base, newVisitor: true, visitorCount: 1 }, ["open", "hot"], "https://dash.test")).toBe(
     ":fire: *deal.example.com* · read to the end and clicked\nAtlanta, US · 3s · 1 click → https://dash.test/#site=deal.example.com",
   );
+});
+
+describe("PULSE_EXCLUDE name matching", () => {
+  test("matches any word anywhere in the name, ignoring case", () => {
+    expect(isExcludedName("acme-RevOps-dashboard", ["revops"])).toBe(true);
+    expect(isExcludedName("revops", ["internal", "revops"])).toBe(true);
+  });
+  test("no words or no match means not excluded", () => {
+    expect(isExcludedName("acme-proposal", ["revops"])).toBe(false);
+    expect(isExcludedName("revops-board", [])).toBe(false);
+  });
 });

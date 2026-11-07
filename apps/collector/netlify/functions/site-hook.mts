@@ -2,15 +2,18 @@ import type { Config, Context } from "@netlify/functions";
 import {
   NetlifyApiError,
   env,
+  forgetSite,
   getSite,
   getSiteRecord,
   hostOf,
+  isExcludedName,
   isSiteId,
   ownUrl,
   pulseTeams,
   readOrgHook,
   refreshTrackedSite,
   trackSite,
+  untrackSite,
   upsertSite,
   verifyNetlifySignature,
 } from "../../../../packages/core/src/index.mts";
@@ -67,11 +70,21 @@ async function handle(hook: { siteId: string; name: string; team: string }, even
   // Already decided: tracked, untracked by a person, or outside our teams.
   const known = await getSiteRecord(db, hook.siteId);
   if (known?.status === "tracked" && event === "site_published") {
+    const site = await getSite(hook.siteId);
+    // renamed into PULSE_EXCLUDE: take the tracker back out and drop its data
+    if (isExcludedName(site.name)) {
+      await untrackSite(db, site.id);
+      await forgetSite(db, site.id);
+      return ["untracked", `${site.name} matches PULSE_EXCLUDE`];
+    }
     // keep the thumbnail, creator, name and domains current; the snippet is already there
-    await refreshTrackedSite(db, await getSite(hook.siteId));
+    await refreshTrackedSite(db, site);
     return ["refreshed", known.name];
   }
   if (known) return ["skipped", `already ${known.status}`];
+
+  // Excluded by name. Not cached, so changing PULSE_EXCLUDE takes effect on the next deploy.
+  if (hook.name && isExcludedName(hook.name)) return ["skipped", `${hook.name} matches PULSE_EXCLUDE`];
 
   // site_created carries the team; skip other teams without an API call.
   if (hook.team && !teams.includes(hook.team)) {
@@ -94,6 +107,7 @@ async function handle(hook: { siteId: string; name: string; team: string }, even
     await upsertSite(db, site, "ignored");
     return ["ignored", `team ${site.team}`];
   }
+  if (isExcludedName(site.name)) return ["skipped", `${site.name} matches PULSE_EXCLUDE`];
 
   // Never inject into Proposal Pulse itself.
   const collectorUrl = ownUrl() || context.site?.url || "";
