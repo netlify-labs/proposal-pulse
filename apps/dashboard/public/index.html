@@ -152,6 +152,10 @@ td.tcell{width:84px;padding-right:0}
 .link-out{display:flex;gap:8px;margin-top:12px}
 .link-out input{flex:1}
 .hint{font-size:12.5px;color:var(--muted)}
+/* demo mode: blur customer-identifying text (recipients, emails, site names, screenshots); creators and locations stay readable */
+body.demo .pv,body.demo .thumb,body.demo #lsite,body.demo #lout,body.demo .sites-list .nm,body.demo .clicks .mono{filter:blur(6px);user-select:none}
+body.demo .pv{display:inline-block}
+.hbtn.on{background:var(--pink);border-color:var(--pink);color:#fff}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--dark);color:#E7F2F0;padding:10px 16px;border-radius:10px;font-size:13px;z-index:40;display:none;max-width:90vw}
 .section-title{font:600 11px "JetBrains Mono",monospace;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:18px 0 8px}
 @media (max-width:860px){.kpis{grid-template-columns:repeat(2,1fr)}.kpis .kpi:last-child{grid-column:span 2}.setup-grid{grid-template-columns:1fr}.grid2{grid-template-columns:repeat(2,1fr)}.hide-sm{display:none}th,td{padding:10px}}
@@ -169,11 +173,15 @@ td.tcell{width:84px;padding-right:0}
 (function(){
 "use strict";
 var LOGO='<svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#05BDBA" fill-opacity=".14"/><path d="M4 17h6l3-7 5 13 3-6h7" fill="none" stroke="#05BDBA" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-var S={key:'open',days:+(ls('pp_range')||2),tab:ls('pp_tab')||'activity',data:null,status:null,sites:null,q:'',siteFilter:'tracked',siteQ:'',sel:{},creator:ls('pp_creator')||'',hotOnly:false,loc:null};
+var S={key:'open',days:+(ls('pp_range')||2),tab:ls('pp_tab')||'activity',data:null,status:null,sites:null,q:'',siteFilter:'tracked',siteQ:'',sel:{},creator:ls('pp_creator')||'',hotOnly:false,loc:null,demo:ls('pp_demo')==='1'};
 function ss(k,v){try{if(v===undefined)return sessionStorage.getItem(k);if(v===null)sessionStorage.removeItem(k);else sessionStorage.setItem(k,v)}catch(e){return null}}
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);if(v===null)localStorage.removeItem(k);else localStorage.setItem(k,v)}catch(e){return null}}
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
 function $(id){return document.getElementById(id)}
+// private value: blurred in demo mode
+function pv(s){return '<span class="pv">'+esc(s)+'</span>'}
+// hover text can leak names, so demo mode drops it
+function tip(s){return S.demo?'':esc(s)}
 function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(toast._t);toast._t=setTimeout(function(){t.style.display='none'},2600)}
 function label(h){return String(h||'').replace(/\.netlify\.app$/,'')}
 function dur(ms){var s=Math.round((ms||0)/1000);if(s<60)return s+'s';var m=Math.floor(s/60),r=s%60;if(m<60)return r?m+'m '+r+'s':m+'m';return Math.floor(m/60)+'h '+(m%60)+'m'}
@@ -213,7 +221,7 @@ function visitMap(sessions,opt){
   var sel=opt.sel||[];
   var dots=cl.map(function(p){var r=(4+Math.sqrt(p.n)*2.2)*k,c=now-p.last<86400000?'var(--pink)':'var(--teal)';
     var on=sel.length&&p.keys.some(function(x){return sel.indexOf(x)>-1}),cls=opt.pick?'pick'+(on?' sel':sel.length?' dim':''):'';
-    var tip=p.place+' · '+p.n+' visit'+(p.n===1?'':'s')+(Object.keys(p.who).length?' · '+Object.keys(p.who).slice(0,4).join(', '):'')+(opt.sites?' · '+Object.keys(p.sites).slice(0,3).join(', '):'')+' · last '+ago(p.last)+(opt.pick?(on?' · click to show all':' · click to filter'):'');
+    var tip=p.place+' · '+p.n+' visit'+(p.n===1?'':'s')+(!S.demo&&Object.keys(p.who).length?' · '+Object.keys(p.who).slice(0,4).join(', '):'')+(opt.sites&&!S.demo?' · '+Object.keys(p.sites).slice(0,3).join(', '):'')+' · last '+ago(p.last)+(opt.pick?(on?' · click to show all':' · click to filter'):'');
     return '<g'+(opt.pick?' class="'+cls+'" tabindex="0" role="button" aria-pressed="'+(on?'true':'false')+'" data-locs="'+esc(p.keys.join('|'))+'" data-place="'+esc(p.place)+'"':'')+'><title>'+esc(tip)+'</title><circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+(r*2.2).toFixed(2)+'" fill="'+c+'" opacity=".16"/><circle cx="'+p.x.toFixed(1)+'" cy="'+p.y.toFixed(1)+'" r="'+r.toFixed(2)+'" fill="'+c+'" stroke="#fff" stroke-width="'+(1.5*k).toFixed(2)+'"/></g>'}).join('');
   var cap=pts.length?'<span><i style="background:var(--pink)"></i>last 24h</span><span><i style="background:var(--teal)"></i>earlier</span><span>Approximate · network location</span>'+(noLoc?'<span>'+noLoc+' older visit'+(noLoc===1?'':'s')+' without location</span>':''):'<span>'+(sessions.length?'No locations yet: visits from now on get a dot':'No visits yet')+'</span>';
   return '<div class="vmap">'+(opt.title?'<div class="ttl">'+esc(opt.title)+'</div>':'')+'<svg viewBox="'+x0.toFixed(1)+' '+y0.toFixed(1)+' '+w.toFixed(1)+' '+h.toFixed(1)+'" role="img" aria-label="Visitor locations"><path class="land" vector-effect="non-scaling-stroke" d="'+W.d+'"/>'+dots+'</svg><div class="cap">'+cap+'</div></div>';
@@ -240,7 +248,9 @@ function heat(x){if(!x.visits)return 0;var sc=Math.min(40,x.engaged/1000/60*8)+M
 function heatColor(v){return v>=60?'var(--pink)':v>=30?'var(--amber)':v>0?'var(--teal)':'var(--line)'}
 
 // ---------- rendering ----------
+function applyDemo(){document.body.classList.toggle('demo',!!S.demo)}
 function render(){
+  applyDemo();
   var app=$('app');
   if(!S.key){app.innerHTML=loginView();bindLogin();return}
   app.innerHTML=shell();
@@ -254,6 +264,7 @@ function shell(){
   return '<header><div class="wrap"><div class="brand">'+LOGO+'<span>Proposal Pulse</span></div><div class="spacer"></div>'+
   '<span class="live hide-sm"><span class="dot"></span><span id="upd">live</span></span>'+
   '<select class="hbtn" id="days" aria-label="Date range">'+[2,7,30,90,180].map(function(d){return '<option value="'+d+'"'+(d===S.days?' selected':'')+'>Last '+rangeLabel(d)+'</option>'}).join('')+'</select>'+
+  '<button class="hbtn'+(S.demo?' on':'')+'" id="demo" aria-pressed="'+(S.demo?'true':'false')+'" title="Blur recipient names, emails and site names for screen sharing">'+(S.demo?'Demo mode on':'Demo mode')+'</button>'+
   '<button class="hbtn" id="rf" title="Refresh">Refresh</button></div></header>'+
   '<main class="wrap"><div id="kpis"></div><nav class="tabs">'+
   [['activity','Activity'],['proposals','Proposals'],['links','Link builder'],['setup','Setup']].map(function(t){return '<button data-tab="'+t[0]+'" class="'+(S.tab===t[0]?'on':'')+'">'+t[1]+'</button>'}).join('')+
@@ -262,6 +273,8 @@ function shell(){
 function bindShell(){
   $('days').onchange=function(){S.days=+this.value;ls('pp_range',String(S.days));S.data=null;load()};
   $('rf').onclick=function(){load(true)};
+  $('demo').onclick=function(){S.demo=!S.demo;ls('pp_demo',S.demo?'1':null);applyDemo();var b=this;b.classList.toggle('on',S.demo);b.setAttribute('aria-pressed',S.demo?'true':'false');b.textContent=S.demo?'Demo mode on':'Demo mode';
+    if(S.data){kpis();body();if($('drawer').classList.contains('on'))openFromHash()}};
   document.querySelectorAll('nav.tabs button').forEach(function(b){b.onclick=function(){S.tab=b.dataset.tab;ls('pp_tab',S.tab);document.querySelectorAll('nav.tabs button').forEach(function(x){x.classList.toggle('on',x===b)});body()}});
 }
 function load(manual){
@@ -276,7 +289,7 @@ function kpis(){
   $('kpis').innerHTML='<div class="kpis">'+
    k('Tracked',(S.data.tracked||[]).length,'proposal sites')+
    k('Opened',opened.length,'in last '+rangeLabel(S.days))+
-   k('Live now',live.length,live.length?esc(label(live[0].host)):'nobody right now')+
+   k('Live now',live.length,live.length?pv(label(live[0].host)):'nobody right now')+
    k('Clicks',human.reduce(function(a,s){return a+clicksOf(s)},0),'links and buttons')+
    k('Avg read',dur(avg),human.length+' visits')+'</div>';
   function k(l,v,s,c){return '<div class="kpi '+(c||'')+'"><div class="l">'+l+'</div><div class="v">'+v+'</div><div class="s">'+s+'</div></div>'}
@@ -303,12 +316,12 @@ function sessionCard(s,withSite){
   if(s.wrongPw)badges.push('<span class="badge pink">wrong password ×'+s.wrongPw+'</span>');
   var facts=[];
   if(s.unlocked&&s.human){var n=clicksOf(s);facts.push(dur(s.engagedMs)+' read',(s.maxScroll||0)+'% scrolled',n+' click'+(n===1?'':'s'));if(s.paths&&s.paths.length>1)facts.push(s.paths.length+' pages')}
-  facts.push(s.r?'<span class="who">'+esc(s.r)+'</span>':'Unknown recipient',esc([s.city,s.cc].filter(Boolean).join(', ')||'Unknown location'),esc((s.device&&s.device!=='Desktop'?s.device+' · ':'')+s.browser+'/'+s.os));
+  facts.push(s.r?'<span class="who pv">'+esc(s.r)+'</span>':'Unknown recipient',esc([s.city,s.cc].filter(Boolean).join(', ')||'Unknown location'),esc((s.device&&s.device!=='Desktop'?s.device+' · ':'')+s.browser+'/'+s.os));
   if(s.ref)facts.push('via '+esc(s.ref));
   var t=withSite?trackedByHost()[s.host]:null,thumb=t&&t.screenshotUrl,url=(t&&t.url)||('https://'+s.host),by=withSite?creatorOf(s.host):'';
   var h='<div class="item'+(withSite?'':' nothumb')+(cls==='brief'?' dim':'')+'">'+
-    (withSite?'<a class="tlink" href="'+esc(url)+'" target="_blank" rel="noopener" title="Open '+esc(label(s.host))+'">'+(thumb?'<img class="thumb" loading="lazy" alt="" src="'+esc(thumb)+'">':'<span class="thumb"></span>')+'</a>':'')+
-    '<div>'+(withSite?'<div class="t1"><a class="site" href="#site='+encodeURIComponent(s.host)+'">'+esc(label(s.host))+'</a>'+(by?'<span class="by">by '+esc(by)+'</span>':'')+'</div>':'')+
+    (withSite?'<a class="tlink" href="'+esc(url)+'" target="_blank" rel="noopener" title="'+tip('Open '+label(s.host))+'">'+(thumb?'<img class="thumb" loading="lazy" alt="" src="'+esc(thumb)+'">':'<span class="thumb"></span>')+'</a>':'')+
+    '<div>'+(withSite?'<div class="t1"><a class="site" href="#site='+encodeURIComponent(s.host)+'">'+pv(label(s.host))+'</a>'+(by?'<span class="by">by '+esc(by)+'</span>':'')+'</div>':'')+
     '<div class="st '+cls+'">'+esc(title)+badges.join(' ')+'</div>'+
     '<div class="t2">'+facts.join(' · ')+'</div>';
   if(s.unlocked&&((s.sections&&s.sections.length)||(s.clicks&&s.clicks.length))){
@@ -344,7 +357,7 @@ function proposals(b){
   var sites=bySite().sort(function(a,b){return (b.last-a.last)||(a.name<b.name?-1:1)});
   b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="pq" placeholder="Search proposals" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+creatorSelect('pcr')+'<label class="hint"><input type="checkbox" id="phot" '+(S.hotOnly?'checked':'')+'> 🔥 only</label><span class="hint">🔥 = read to the end and clicked, or came back</span></div><div style="overflow-x:auto"><table><thead><tr><th></th><th>Proposal</th><th>Last opened</th><th class="hide-sm">People</th><th class="hide-sm">Visits</th><th>Read time</th><th class="hide-sm">Scroll</th><th>Clicks</th></tr></thead><tbody id="pt"></tbody></table></div></div>';
   function draw(){var q=S.q.toLowerCase();var f=sites.filter(function(x){return (!q||x.host.indexOf(q)>-1||x.name.toLowerCase().indexOf(q)>-1||Object.keys(x.recips).join(' ').toLowerCase().indexOf(q)>-1)&&(!S.creator||x.creator===S.creator)&&(!S.hotOnly||x.hot.length)});
-    $('pt').innerHTML=f.length?f.map(function(x){return '<tr data-host="'+esc(x.host)+'"><td class="tcell"><a href="'+esc(x.url)+'" target="_blank" rel="noopener" class="topen" title="Open '+esc(label(x.host))+'">'+(x.thumb?'<img class="thumb" loading="lazy" alt="" src="'+esc(x.thumb)+'">':'<span class="thumb"></span>')+'</a></td><td><span class="heat" style="background:'+heatColor(x.score)+'" title="Heat '+x.score+'"></span><b>'+esc(label(x.host))+'</b>'+(x.hot.length?'<span class="fire" title="'+esc(x.hot.join(' · '))+'">🔥 '+x.hot.length+'</span>':'')+(x.creator?'<div class="by" style="margin-left:18px">by '+esc(x.creator)+'</div>':'')+(x.gateOnly&&!x.visits?'<div class="hint" style="margin-left:18px">🔒 reached password page ×'+x.gateOnly+'</div>':'')+'</td><td class="num">'+(x.last?ago(x.last):'<span class="hint">not yet</span>')+'</td><td class="num hide-sm">'+(x.people||'–')+'</td><td class="num hide-sm">'+(x.visits||'–')+'</td><td class="num">'+(x.engaged?dur(x.engaged):'–')+'</td><td class="num hide-sm">'+(x.visits?x.maxScroll+'%':'–')+'</td><td class="num">'+(x.clicks||'')+'</td></tr>'}).join(''):'<tr><td colspan="8" class="empty">No proposals tracked yet. Go to Setup to add the tracker to your sites.</td></tr>';
+    $('pt').innerHTML=f.length?f.map(function(x){return '<tr data-host="'+esc(x.host)+'"><td class="tcell"><a href="'+esc(x.url)+'" target="_blank" rel="noopener" class="topen" title="'+tip('Open '+label(x.host))+'">'+(x.thumb?'<img class="thumb" loading="lazy" alt="" src="'+esc(x.thumb)+'">':'<span class="thumb"></span>')+'</a></td><td><span class="heat" style="background:'+heatColor(x.score)+'" title="Heat '+x.score+'"></span><b>'+pv(label(x.host))+'</b>'+(x.hot.length?'<span class="fire" title="'+tip(x.hot.join(' · '))+'">🔥 '+x.hot.length+'</span>':'')+(x.creator?'<div class="by" style="margin-left:18px">by '+esc(x.creator)+'</div>':'')+(x.gateOnly&&!x.visits?'<div class="hint" style="margin-left:18px">🔒 reached password page ×'+x.gateOnly+'</div>':'')+'</td><td class="num">'+(x.last?ago(x.last):'<span class="hint">not yet</span>')+'</td><td class="num hide-sm">'+(x.people||'–')+'</td><td class="num hide-sm">'+(x.visits||'–')+'</td><td class="num">'+(x.engaged?dur(x.engaged):'–')+'</td><td class="num hide-sm">'+(x.visits?x.maxScroll+'%':'–')+'</td><td class="num">'+(x.clicks||'')+'</td></tr>'}).join(''):'<tr><td colspan="8" class="empty">No proposals tracked yet. Go to Setup to add the tracker to your sites.</td></tr>';
     document.querySelectorAll('#pt tr[data-host]').forEach(function(tr){tr.onclick=function(){location.hash='site='+encodeURIComponent(tr.dataset.host)}});document.querySelectorAll('#pt a.topen').forEach(function(a){a.onclick=function(e){e.stopPropagation()}})}
   draw();$('pq').oninput=function(){S.q=this.value;draw()};
   if($('pcr'))$('pcr').onchange=function(){S.creator=this.value;ls('pp_creator',this.value||null);draw()};
@@ -362,9 +375,9 @@ function drawer(host){
   var secCount={};x.sessions.forEach(function(s){(s.sections||[]).forEach(function(l){secCount[l]=(secCount[l]||0)+1})});
   var secs=Object.keys(secCount).sort(function(a,b){return secCount[b]-secCount[a]}),top=secs.length?secCount[secs[0]]:1;
   var hot=(x.hot||[]).length;
-  d.innerHTML='<div class="hd">'+(x.thumb?'<img class="thumb" alt="" src="'+esc(x.thumb)+'">':'')+'<div style="flex:1;min-width:0"><h3>'+esc(label(host))+'</h3>'+(x.creator?'<div class="sub">by '+esc(x.creator)+'</div>':'')+'</div><a class="hbtn" href="'+esc(x.url||('https://'+host))+'" target="_blank" rel="noopener">Open site ↗</a><button class="hbtn" id="dx" aria-label="Close">✕</button></div><div class="bd">'+
+  d.innerHTML='<div class="hd">'+(x.thumb?'<img class="thumb" alt="" src="'+esc(x.thumb)+'">':'')+'<div style="flex:1;min-width:0"><h3>'+pv(label(host))+'</h3>'+(x.creator?'<div class="sub">by '+esc(x.creator)+'</div>':'')+'</div><a class="hbtn" href="'+esc(x.url||('https://'+host))+'" target="_blank" rel="noopener">Open site ↗</a><button class="hbtn" id="dx" aria-label="Close">✕</button></div><div class="bd">'+
   visitMap(x.sessions.filter(function(s){return s.unlocked||s.gate}),{aspect:2.6,px:600})+
-  '<div class="dstats"><span><b>'+x.people+'</b> '+(x.people===1?'person':'people')+'</span><span><b>'+x.visits+'</b> visit'+(x.visits===1?'':'s')+'</span><span><b>'+dur(x.engaged)+'</b> read</span><span><b>'+x.clicks+'</b> click'+(x.clicks===1?'':'s')+'</span>'+(hot?'<span title="'+esc(x.hot.join(' · '))+'"><b>🔥 '+hot+'</b> hot</span>':'')+'</div>'+
+  '<div class="dstats"><span><b>'+x.people+'</b> '+(x.people===1?'person':'people')+'</span><span><b>'+x.visits+'</b> visit'+(x.visits===1?'':'s')+'</span><span><b>'+dur(x.engaged)+'</b> read</span><span><b>'+x.clicks+'</b> click'+(x.clicks===1?'':'s')+'</span>'+(hot?'<span title="'+tip(x.hot.join(' · '))+'"><b>🔥 '+hot+'</b> hot</span>':'')+'</div>'+
   (secs.length?'<div class="section-title">Most-read sections</div><div class="panel" style="padding:8px 12px">'+secs.slice(0,8).map(function(l){return '<div class="secrow"><span>'+esc(l)+'</span><span class="mono hint">'+secCount[l]+'×</span><i style="width:'+Math.round(secCount[l]/top*100)+'%"></i></div>'}).join('')+'</div>':'')+
   '<div class="section-title">Visit timeline</div><div class="panel feed">'+(x.sessions.length?x.sessions.slice().sort(function(a,b){return b.last-a.last}).map(function(s){return sessionCard(s,false)}).join(''):'<div class="empty">No visits yet.</div>')+'</div>'+
   '<div class="section-title">Personal link</div><div class="panel" style="padding:12px">'+linkForm(host)+'</div></div>';
@@ -397,7 +410,7 @@ function setup(b){
     $('st').innerHTML=
     row('Database',st.db?'<span class="ok">Connected</span>':'<span class="no">Error</span>',st.db?st.trackedCount+' tracked · '+st.excludedCount+' untracked':esc(st.dbError))+
     row('Collector',st.collector?'<span class="ok">Connected</span>':'<span class="no">Error</span>',st.collector?'<span class="mono">'+esc(st.collectorUrl.replace(/^https?:\/\//,''))+'</span>':esc(st.collectorError))+
-    (st.collector?row('Netlify token',st.me&&!st.tokenError?'<span class="ok">Connected</span>':'<span class="no">Error</span>',st.me?'as '+esc(st.me.name||st.me.email)+' (set on the collector)':esc(st.tokenError||'NETLIFY_TOKEN is not set on the collector'))+
+    (st.collector?row('Netlify token',st.me&&!st.tokenError?'<span class="ok">Connected</span>':'<span class="no">Error</span>',st.me?'as '+pv(st.me.name||st.me.email)+' (set on the collector)':esc(st.tokenError||'NETLIFY_TOKEN is not set on the collector'))+
     row('Teams',st.teams.length?'<span class="ok">'+st.teams.length+'</span>':'<span class="no">None</span>',st.teams.length?'<span class="mono">'+esc(st.teams.join(', '))+'</span>':'Set PULSE_TEAMS on the collector, then redeploy')+
     row('Slack alerts',st.slack==='paused'?'<span class="no">Paused</span>':st.slack==='none'?'<span class="no">Off</span>':'<span class="ok">On</span>',st.slack==='paused'?'SLACK_ALERTS=off is set on the collector':st.slack==='none'?'Optional: set SLACK_WEBHOOK_URL on the collector':'via '+(st.slack==='workflow'?'Workflow Builder webhook':'Incoming Webhook')):'');
   }).catch(function(e){$('st').innerHTML='<div class="empty">'+esc(e.message)+'</div>'});
@@ -405,10 +418,10 @@ function setup(b){
     var last=h.recent&&h.recent[0];var n=h.last24h||{};
     var counts=Object.keys(n).map(function(k){return esc(k)+' '+n[k]}).join(' · ');
     $('hookp').innerHTML='<div class="status-row"><div><div class="k">Org webhook</div><div class="d">'+
-      (last?'Last event '+ago(last.at)+': '+esc(last.event)+' · '+esc(last.site_name||last.site_id||'')+' → '+esc(last.outcome)+(counts?'<br>Last 24h: '+counts:''):
+      (last?'Last event '+ago(last.at)+': '+esc(last.event)+' · '+pv(last.site_name||last.site_id||'')+' → '+esc(last.outcome)+(counts?'<br>Last 24h: '+counts:''):
        'No deliveries yet. An Organization Owner subscribes the org webhooks once (README, step 8).')+
       '</div></div><div>'+(last?'<span class="ok">Receiving</span>':'<span class="no">Waiting</span>')+'</div></div>'+
-      (h.recent&&h.recent.length?'<details style="padding:0 14px 10px"><summary class="hint" style="cursor:pointer">Recent deliveries</summary><div style="overflow-x:auto"><table><tbody>'+h.recent.map(function(r){return '<tr><td class="num">'+ago(r.at)+'</td><td>'+esc(r.event)+'</td><td>'+esc(r.site_name||r.site_id||'')+'</td><td>'+esc(r.team||'')+'</td><td><b>'+esc(r.outcome)+'</b> <span class="hint">'+esc(r.detail||'')+'</span></td></tr>'}).join('')+'</tbody></table></div></details>':'');
+      (h.recent&&h.recent.length?'<details style="padding:0 14px 10px"><summary class="hint" style="cursor:pointer">Recent deliveries</summary><div style="overflow-x:auto"><table><tbody>'+h.recent.map(function(r){return '<tr><td class="num">'+ago(r.at)+'</td><td>'+esc(r.event)+'</td><td>'+pv(r.site_name||r.site_id||'')+'</td><td>'+esc(r.team||'')+'</td><td><b>'+esc(r.outcome)+'</b> <span class="hint">'+esc(r.detail||'')+'</span></td></tr>'}).join('')+'</tbody></table></div></details>':'');
   }).catch(function(e){$('hookp').innerHTML='<div class="empty">'+esc(e.message)+'</div>'});
   function row(k,v,d){return '<div class="status-row"><div><div class="k">'+k+'</div><div class="d">'+d+'</div></div><div>'+v+'</div></div>'}
   $('sf').onchange=function(){S.siteFilter=this.value;S.sel={};if(this.value==='excluded'&&!S.cands)loadCands();drawSites()};
