@@ -7,8 +7,8 @@ import { recordServerVisit } from "../../lib/visits.mts";
  * Serves the tracker at /t.js (the script itself is public/tracker.js).
  *
  * Browsers that send Global Privacy Control or Do Not Track don't run the tracker, so for them
- * the visit is recorded here, as the script loads: the tracked site from the Referer header,
- * location from context.geo and device from the user agent. Other browsers are left to t.js,
+ * only the load is recorded here: the page from the Referer header, the time, and the country
+ * from context.geo (the user agent is read only to skip bots). Other browsers are left to t.js,
  * so no visit is recorded twice.
  */
 
@@ -29,7 +29,7 @@ async function recordLoad(req: Request, context: Context, signal: "gpc" | "dnt")
   if (!page) return; // the page sent no Referer, so there's no way to tell which site it was
   const site = await trackedSiteForHost(db, page.host);
   if (!site) return;
-  await recordServerVisit(db, { host: site.host, path: page.path }, ua, geoFrom(context.geo), Date.now(), signal);
+  await recordServerVisit(db, { host: site.host, path: page.path }, geoFrom(context.geo), Date.now(), signal);
 }
 
 export default async (req: Request, context: Context) => {

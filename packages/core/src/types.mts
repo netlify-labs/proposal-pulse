@@ -47,8 +47,9 @@ export type Session = {
   title: string;
   /**
    * Set when the server recorded this visit as t.js loaded, because the browser sends Global
-   * Privacy Control or Do Not Track and the tracker doesn't run. Location and device only: no
-   * read time, scroll or clicks, and it may be the password page. Each load is its own visit.
+   * Privacy Control or Do Not Track and the tracker doesn't run. Page, time and country only:
+   * no city, map location, device, read time, scroll or clicks, and it may be the password
+   * page. Each load is its own visit.
    */
   signal?: "gpc" | "dnt";
 };

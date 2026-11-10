@@ -65,7 +65,7 @@ flowchart LR
 
 ### Data and privacy
 
-The tracker sets no cookies and the collector stores no IP addresses. It keeps a random browser ID in `localStorage` and a tab session ID in `sessionStorage`.
+The tracker sets no cookies and the collector stores no IP addresses. It keeps a random browser ID in `localStorage`, replaced after 180 days to match visit retention, and a tab session ID in `sessionStorage`.
 
 What it records, and what it leaves out:
 

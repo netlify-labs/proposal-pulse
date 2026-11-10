@@ -50,7 +50,14 @@
   }
   if (noTrack || store("localStorage", "_pp_off") === "1") return;
 
-  var vid = store("localStorage", "_pp_v") || rid();
+  // The browser ID starts with its creation time (see rid). After 180 days, the same as visit
+  // retention, it is replaced along with the saved link ID, so the browser counts as new.
+  var vid = store("localStorage", "_pp_v");
+  var born = vid ? parseInt(vid.slice(0, 8), 36) : NaN;
+  if (!vid || !(Date.now() - born < 180 * 864e5)) {
+    vid = rid();
+    unstore("_pp_r");
+  }
   store("localStorage", "_pp_v", vid);
   var sid = store("sessionStorage", "_pp_s") || rid();
   store("sessionStorage", "_pp_s", sid);

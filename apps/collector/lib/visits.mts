@@ -67,15 +67,17 @@ async function addVisitorContext(client: Db, s: Session) {
 }
 
 /**
- * Record a page load as a visit from the server alone (see Session.signal). No browser ID
+ * Record a page load as a visit from the server alone (see Session.signal): the page, the time
+ * and the country, nothing else. No city, map location, time zone or device. No browser ID
  * exists for these browsers, so each load gets its own random IDs and isn't counted as a
  * person or a return visit, and no Slack alert fires.
  */
-export async function recordServerVisit(db: Db, page: { host: string; path: string }, ua: string, geo: Geo, now: number, signal: "gpc" | "dnt") {
+export async function recordServerVisit(db: Db, page: { host: string; path: string }, geo: Geo, now: number, signal: "gpc" | "dnt") {
   const id = () => now.toString(36) + randomBytes(6).toString("hex");
   const ev: BeaconEvent = { k: "view", h: page.host, p: page.path, sid: id(), vid: id() };
-  const s = newSession(ev, ua, geo, now);
+  const s = newSession(ev, "", { country: geo.country, cc: geo.cc }, now);
   applyEvent(s, ev, now);
+  s.device = s.browser = s.os = "";
   s.signal = signal;
   await db.query(
     `INSERT INTO sessions (sid, vid, host, started_at, last_at, data)

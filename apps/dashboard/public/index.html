@@ -293,14 +293,14 @@ function sessionCard(s,withSite){
   if(s.alerts&&s.alerts.indexOf('open')>-1){if(s.newVisitor&&s.visitorCount>1)badges.push('<span class="badge amber">new person · '+s.visitorCount+' total</span>');else if(s.visitNo>1)badges.push('<span class="badge teal">visit #'+s.visitNo+'</span>')}
   var facts=[];
   if(s.unlocked&&s.human){var n=clicksOf(s);facts.push(dur(s.engagedMs)+' read',(s.maxScroll||0)+'% scrolled',n+' click'+(n===1?'':'s'));if(s.paths&&s.paths.length>1)facts.push(s.paths.length+' pages')}
-  facts.push(s.r?'<span class="who" title="Link ID">🔗 '+esc(s.r)+'</span>':'Shared link',esc([s.city,s.cc].filter(Boolean).join(', ')||'Unknown location'),esc((s.device&&s.device!=='Desktop'?s.device+' · ':'')+s.browser+'/'+s.os));
+  facts.push(s.r?'<span class="who" title="Link ID">🔗 '+esc(s.r)+'</span>':'Shared link',esc([s.city,s.cc].filter(Boolean).join(', ')||'Unknown location'),s.browser?esc((s.device&&s.device!=='Desktop'?s.device+' · ':'')+s.browser+'/'+s.os):'');
   if(s.ref)facts.push('via '+esc(s.ref));
   var t=withSite?trackedByHost()[s.host]:null,thumb=t&&t.screenshotUrl,url=(t&&t.url)||('https://'+s.host),by=withSite?creatorOf(s.host):'';
   var h='<div class="item'+(withSite?'':' nothumb')+(cls==='brief'?' dim':'')+'">'+
     (withSite?'<a class="tlink" href="'+esc(url)+'" target="_blank" rel="noopener" title="Open '+esc(label(s.host))+'">'+(thumb?'<img class="thumb" loading="lazy" alt="" src="'+esc(thumb)+'">':'<span class="thumb"></span>')+'</a>':'')+
     '<div>'+(withSite?'<div class="t1"><a class="site" href="#site='+encodeURIComponent(s.host)+'">'+esc(label(s.host))+'</a>'+(by?'<span class="by">by '+esc(by)+'</span>':'')+'</div>':'')+
     '<div class="st '+cls+'">'+esc(title)+badges.join(' ')+'</div>'+
-    '<div class="t2">'+facts.join(' · ')+'</div>';
+    '<div class="t2">'+facts.filter(Boolean).join(' · ')+'</div>';
   if(s.unlocked&&((s.sections&&s.sections.length)||(s.clicks&&s.clicks.length))){
     h+='<details class="more"><summary>Sections read &amp; clicks ›</summary>';
     if(s.sections&&s.sections.length)h+='<div class="t3"><b>Read:</b> '+s.sections.map(esc).join(' → ')+'</div>';

@@ -181,10 +181,10 @@ describe("opt-out", () => {
 });
 
 describe("server-recorded loads (GPC / Do Not Track)", () => {
-  test("store location and device with the signal, and no reading data", async () => {
-    const s = await recordServerVisit(db, { host: site.host, path: "/" }, "Mozilla/5.0 (iPhone) Safari/604.1", { city: "Austin", cc: "US", lat: 30.27, lon: -97.74 }, 50_000, "gpc");
+  test("store only the page, time and country with the signal", async () => {
+    const s = await recordServerVisit(db, { host: site.host, path: "/" }, { city: "Austin", country: "United States", cc: "US", tz: "America/Chicago", lat: 30.27, lon: -97.74 }, 50_000, "gpc");
     const { rows } = await pool.query("SELECT vid, data FROM sessions WHERE sid = $1", [s.sid]);
-    expect(rows[0].data).toMatchObject({ signal: "gpc", host: site.host, city: "Austin", cc: "US", lat: 30.3, lon: -97.7, device: "Mobile", unlocked: true, human: false, engagedMs: 0, clicks: [], alerts: [] });
+    expect(rows[0].data).toMatchObject({ signal: "gpc", host: site.host, paths: ["/"], start: 50_000, country: "United States", cc: "US", city: "", tz: "", lat: null, lon: null, device: "", browser: "", os: "", unlocked: true, human: false, engagedMs: 0, clicks: [], alerts: [] });
     expect(rows[0].vid).toMatch(/^[a-z0-9]{8,32}$/);
     // not counted as a person
     expect((await pool.query("SELECT count(*)::int n FROM visitors WHERE vid = $1", [rows[0].vid])).rows[0].n).toBe(0);
