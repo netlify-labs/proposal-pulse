@@ -5,6 +5,7 @@ import {
   forgetSite,
   getMe,
   hostOf,
+  isExcludedName,
   json,
   listTeamSites,
   ownUrl,
@@ -53,7 +54,7 @@ export default async (req: Request, context: Context) => {
       const status = new Map(known.rows.map((k) => [k.id, k.status]));
       const sites = lists
         .flat()
-        .filter((s) => status.get(s.id) !== "tracked" && s.id !== context.site?.id && !s.hosts.some((h) => ownHosts.includes(h)))
+        .filter((s) => status.get(s.id) !== "tracked" && !isExcludedName(s.name) && s.id !== context.site?.id && !s.hosts.some((h) => ownHosts.includes(h)))
         .sort((a, b) => (b.publishedAt || b.createdAt).localeCompare(a.publishedAt || a.createdAt))
         .slice(0, 2000)
         .map((s) => ({ id: s.id, name: s.name, team: s.team, url: s.url, createdAt: s.createdAt, publishedAt: s.publishedAt, status: status.get(s.id) === "excluded" ? "excluded" : "new" }));
@@ -75,6 +76,7 @@ export default async (req: Request, context: Context) => {
           const site = await resolveSite(ref);
           if (!teams.includes(site.team)) throw new Error(`${site.name} is in team ${site.team}, which is not in PULSE_TEAMS`);
           if (site.id === context.site?.id || site.hosts.some((h) => ownHosts.includes(h))) throw new Error(`${site.name} is part of Proposal Pulse`);
+          if (isExcludedName(site.name)) throw new Error(`${site.name} matches PULSE_EXCLUDE`);
           await trackSite(db, site, collectorUrl, "dashboard");
           results.push({ ref, ok: true, id: site.id, name: site.name });
         } catch (e: any) {

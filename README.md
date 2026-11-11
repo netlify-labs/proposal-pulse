@@ -164,6 +164,7 @@ Done when: `apps/collector/.netlify/state.json` and `apps/dashboard/.netlify/sta
 | `NETLIFY_TOKEN` | required, secret | The personal access token. Adds and removes the tracker snippet. |
 | `HOOK_SECRET` | required, secret | Contents of `~/.proposal-pulse-hook-secret`. Verifies org webhooks and dashboard requests. |
 | `PULSE_TEAMS` | required | Team slugs to track, comma-separated. Empty means nothing is tracked. |
+| `PULSE_EXCLUDE` | optional | Words, comma-separated. A project whose name contains one (case-insensitive) is never tracked, e.g. `revops,internal`. |
 | `DASHBOARD_URL` | required | Linked from Slack alerts, and never tracked itself. |
 | `SLACK_WEBHOOK_URL` | optional, secret | Slack Incoming Webhook or Workflow Builder webhook ([Slack alerts](#slack-alerts)). |
 | `SLACK_ALERTS` | optional | `off` pauses alerts without removing the webhook. |
