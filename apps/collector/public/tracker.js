@@ -110,8 +110,10 @@
 
   if (full) startFull();
   else startOpen();
-  if (!EU && store("localStorage", "_pp_n") !== "1") pill("notice");
-  if (EU && !choice) pill("ask");
+  if (!EU && store("localStorage", "_pp_n") !== "1") pill("notice", true);
+  if (EU && choice === "y") pill("on", false);
+  // an unanswered ask that already shrank to a dot in this tab stays a dot on reload
+  if (EU && !choice) pill("ask", store("sessionStorage", "_pp_a") !== "1");
 
   // ---------- open only (EU/UK/CH before a "Sure") ----------
   function startOpen() {
@@ -132,42 +134,51 @@
   }
 
   // ---------- the pill ----------
-  function pill(mode) {
-    function show() {
-      var host = document.createElement("div");
-      host.setAttribute("data-proposal-pulse", "");
-      host.style.cssText = "position:fixed;right:12px;bottom:12px;z-index:2147483000;margin:0;padding:0;border:0";
-      var root = host.attachShadow ? host.attachShadow({ mode: "open" }) : host;
-      var css =
-        ".p{position:relative;display:inline-flex;align-items:center;gap:6px;background:#181a1c;color:#e9ebec;border-radius:999px;padding:4px 4px 4px 11px;" +
-        "font:500 11px/1 system-ui,-apple-system,'Segoe UI',sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.1);white-space:nowrap}" +
-        ".n{padding:6px 6px 6px 11px;gap:7px}.d{width:6px;height:6px;border-radius:50%;background:#32e6e2}.s{opacity:.35}" +
-        "button{all:unset;cursor:pointer;font-weight:600;border-radius:999px;font-size:10.5px}" +
-        "button:focus-visible{outline:2px solid #32e6e2;outline-offset:2px}" +
-        ".y{background:#32e6e2;color:#0b1a1a;padding:5px 9px}.no{border:1px solid #4a4e52;padding:4px 8px}" +
-        ".l{color:#32e6e2}.x{color:#8b9095;padding:0 3px;font-size:12px}" +
-        ".q{display:inline-block;width:15px;height:15px;border:1px solid #5a5e62;color:#9aa0a5;font-size:9px;text-align:center;line-height:15px;box-sizing:border-box}" +
-        ".t{position:absolute;right:0;bottom:36px;width:230px;background:#181a1c;color:#c9cdd0;border-radius:10px;padding:9px 11px;" +
-        "font:400 11px/1.45 system-ui,-apple-system,'Segoe UI',sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.2);white-space:normal}.t b{color:#fff}";
-      var what = "Reading stats are time on page, scroll depth and clicks, sent to Netlify. No cookies, no ads.";
-      root.innerHTML =
-        "<style>" + css + "</style>" +
-        (mode === "ask"
-          ? '<div class="p" role="region" aria-label="Reading stats"><span>Share reading stats?</span>' +
-            '<button class="q" aria-expanded="false" aria-label="What are reading stats?">?</button>' +
-            '<button class="y">Sure</button><button class="no">No</button>' +
-            '<div class="t" hidden><b>' + what.replace(" are", "</b> are") + " Without them, only the open, rough location and device type are noted.</div></div>"
-          : '<div class="p n" role="region" aria-label="Reading stats" title="' + what + '"><span class="d"></span><span>Reading stats on</span>' +
-            '<span class="s">·</span><button class="l">Turn off</button><button class="x" aria-label="Dismiss">✕</button></div>');
-      document.body.appendChild(host);
-      lift(host);
-      function close() {
-        host.remove();
-      }
-      function on(sel, fn) {
-        var b = root.querySelector(sel);
-        if (b) b.addEventListener("click", fn);
-      }
+  // notice: "Reading stats on · Turn off ✕" outside the EU/UK/CH. It fades away on the first
+  //   click on the page (or after 10 s) and doesn't come back on this site.
+  // ask: "Share reading stats? Sure / No" in the EU/UK/CH. Ignoring it is never a yes: after the
+  //   first click or scroll on the page (or 8 s) it shrinks to a dot that reopens it, stays a dot
+  //   on reloads in that tab, and asks again on the next visit. No is remembered.
+  // on: after an EU "Sure", a dot that opens "Reading stats on · Turn off", so turning reading
+  //   stats off is as easy as agreeing was.
+  function pill(kind, open) {
+    var host, root, w, first = open, touched = false;
+    var css =
+      ".w{display:flex;justify-content:flex-end;transition:opacity .25s}.w.f{opacity:0}" +
+      ".p{position:relative;display:inline-flex;align-items:center;gap:6px;background:#181a1c;color:#e9ebec;border-radius:999px;padding:4px 4px 4px 11px;" +
+      "font:500 11px/1 system-ui,-apple-system,'Segoe UI',sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.18);border:1px solid rgba(255,255,255,.1);white-space:nowrap}" +
+      ".n{padding:6px 6px 6px 11px;gap:7px}.d{width:6px;height:6px;border-radius:50%;background:#32e6e2}.s{opacity:.35}" +
+      "button{all:unset;cursor:pointer;font-weight:600;border-radius:999px;font-size:10.5px}" +
+      "button:focus-visible{outline:2px solid #32e6e2;outline-offset:2px}" +
+      ".y{background:#32e6e2;color:#0b1a1a;padding:5px 9px}.no{border:1px solid #4a4e52;padding:4px 8px}" +
+      ".l{color:#32e6e2}.x{color:#8b9095;padding:0 3px;font-size:12px}" +
+      ".q{display:inline-block;width:15px;height:15px;border:1px solid #5a5e62;color:#9aa0a5;font-size:9px;text-align:center;line-height:15px;box-sizing:border-box}" +
+      ".t{position:absolute;right:0;bottom:36px;width:230px;background:#181a1c;color:#c9cdd0;border-radius:10px;padding:9px 11px;" +
+      "font:400 11px/1.45 system-ui,-apple-system,'Segoe UI',sans-serif;box-shadow:0 6px 20px rgba(0,0,0,.2);white-space:normal}.t b{color:#fff}" +
+      ".dot{position:relative;display:block;width:18px;height:18px;background:rgba(24,26,28,.6);box-shadow:0 2px 8px rgba(0,0,0,.15)}" +
+      ".dot i{position:absolute;left:6px;top:6px;width:6px;height:6px;border-radius:50%;background:#32e6e2}" +
+      "@media (prefers-reduced-motion:reduce){.w{transition:none}}";
+    var what = "Reading stats are time on page, scroll depth and clicks, sent to Netlify. No cookies, no ads.";
+    function html() {
+      if (!open) return '<button class="dot" aria-label="Reading stats" title="Reading stats"><i></i></button>';
+      if (kind === "ask")
+        return (
+          '<div class="p" role="region" aria-label="Reading stats"><span>Share reading stats?</span>' +
+          '<button class="q" aria-expanded="false" aria-label="What are reading stats?">?</button>' +
+          '<button class="y">Sure</button><button class="no">No</button>' +
+          '<div class="t" hidden><b>' + what.replace(" are", "</b> are") + " Without them, only the open, rough location and device type are noted.</div></div>"
+        );
+      return (
+        '<div class="p n" role="region" aria-label="Reading stats" title="' + what + '"><span class="d"></span><span>Reading stats on</span>' +
+        '<span class="s">·</span><button class="l">Turn off</button>' + (kind === "notice" ? '<button class="x" aria-label="Dismiss">✕</button>' : "") + "</div>"
+      );
+    }
+    function draw() {
+      w.innerHTML = html();
+      on(".dot", function () {
+        open = true;
+        draw();
+      });
       on(".q", function () {
         var t = root.querySelector(".t");
         t.hidden = !t.hidden;
@@ -175,27 +186,93 @@
       });
       on(".y", function () {
         store("localStorage", "_pp_c", "y");
-        close();
         upgrade();
+        kind = "on";
+        shrink();
       });
       on(".no", function () {
         store("localStorage", "_pp_c", "n");
-        close();
+        gone();
       });
       on(".l", function () {
         optOut();
         stopped = true;
-        close();
+        gone();
       });
       on(".x", function () {
         store("localStorage", "_pp_n", "1");
-        close();
+        gone();
       });
     }
-    if (document.body) setTimeout(show, 1200);
-    else document.addEventListener("DOMContentLoaded", function () {
-      setTimeout(show, 1200);
-    });
+    function on(sel, fn) {
+      var b = root.querySelector(sel);
+      if (b)
+        b.addEventListener("click", function (e) {
+          touched = true;
+          fn.call(this, e);
+        });
+    }
+    function fade(then) {
+      w.className = "w f";
+      setTimeout(function () {
+        w.className = "w";
+        then();
+      }, 250);
+    }
+    function gone() {
+      fade(function () {
+        host.remove();
+      });
+    }
+    function shrink() {
+      if (!open) return;
+      open = false;
+      fade(draw);
+    }
+    // the visitor moved on without answering
+    function away() {
+      if (!open || !host.isConnected) return;
+      if (kind === "notice") {
+        store("localStorage", "_pp_n", "1");
+        return gone();
+      }
+      if (kind === "ask" && first) store("sessionStorage", "_pp_a", "1");
+      first = false;
+      shrink();
+    }
+    // the timer doesn't close it on someone who is using it (reading the "?", say)
+    function idle() {
+      if (!touched) away();
+    }
+    function show() {
+      host = document.createElement("div");
+      host.setAttribute("data-proposal-pulse", "");
+      host.style.cssText = "position:fixed;right:12px;bottom:12px;z-index:2147483000;margin:0;padding:0;border:0";
+      root = host.attachShadow ? host.attachShadow({ mode: "open" }) : host;
+      root.innerHTML = "<style>" + css + '</style><div class="w"></div>';
+      w = root.querySelector(".w");
+      draw();
+      document.body.appendChild(host);
+      lift(host);
+      // clicks inside the pill arrive retargeted to the host, so they don't count as moving on
+      window.addEventListener(
+        "pointerdown",
+        function (e) {
+          if (e.target !== host) away();
+        },
+        { capture: true, passive: true },
+      );
+      if (kind === "ask" && first) {
+        window.addEventListener("scroll", away, { capture: true, passive: true, once: true });
+        setTimeout(idle, 8000);
+      }
+      if (kind === "notice") setTimeout(idle, 10000);
+    }
+    if (document.body) setTimeout(show, open ? 1200 : 0);
+    else
+      document.addEventListener("DOMContentLoaded", function () {
+        setTimeout(show, open ? 1200 : 0);
+      });
   }
   // keep clear of the page's own fixed controls (slide arrows, chat bubbles) in that corner
   function lift(host) {
