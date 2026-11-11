@@ -3,6 +3,24 @@ import type { Db, SiteRecord, SiteStatus } from "./types.mts";
 
 /** Shared reads and writes on the `sites` table, used by both apps. */
 
+export type AuditAction = "snippet_added" | "snippet_updated" | "snippet_removed" | "site_forgotten" | "visits_deleted" | "visitor_opted_out" | "consent_given";
+
+/**
+ * Append to the audit log: every change Proposal Pulse makes to a live project (Snippet
+ * Injection has no deploy to record it) and every deletion of visit data. Never purged by
+ * the retention job. `via` is where the change came from: webhook, dashboard or visitor.
+ */
+export async function audit(db: Db, action: AuditAction, e: { siteId?: string | null; siteName?: string | null; host?: string | null; via: string; detail?: unknown }) {
+  await db.query("INSERT INTO audit_log (action, site_id, site_name, host, via, detail) VALUES ($1, $2, $3, $4, $5, $6)", [
+    action,
+    e.siteId || null,
+    e.siteName || null,
+    e.host || null,
+    e.via,
+    e.detail === undefined ? null : JSON.stringify(e.detail),
+  ]);
+}
+
 const rowToSite = (r: any): SiteRecord => ({
   id: r.id,
   name: r.name,
@@ -62,7 +80,16 @@ export async function upsertSite(
 
 /** Inject the tracker into a project and record it as tracked, with its thumbnail and creator. */
 export async function trackSite(db: Db, site: NetlifySite, collectorUrl: string, via: string) {
-  const snippetId = await ensureSnippet(site.id, collectorUrl);
+  const change = await ensureSnippet(site.id, collectorUrl);
+  const snippetId = change.id;
+  // record the live change first, so it's logged even if the bookkeeping below fails
+  await audit(db, change.created ? "snippet_added" : "snippet_updated", {
+    siteId: site.id,
+    siteName: site.name,
+    host: site.host,
+    via,
+    detail: { snippetId, team: site.team, html: change.html, previousHtml: change.previousHtml },
+  });
   const createdByName = await creatorName(site.team, site.createdBy).catch(() => "");
   await upsertSite(db, site, "tracked", { snippetId, via, createdByName });
   return snippetId;
@@ -75,8 +102,10 @@ export async function refreshTrackedSite(db: Db, site: NetlifySite) {
 }
 
 /** Remove the tracker and mark the project excluded so webhooks never re-add it. */
-export async function untrackSite(db: Db, id: string) {
-  await removeSnippet(id);
+export async function untrackSite(db: Db, id: string, via: string) {
+  const removed = await removeSnippet(id);
+  const rec = await getSiteRecord(db, id);
+  await audit(db, "snippet_removed", { siteId: id, siteName: rec?.name, host: rec?.host, via, detail: { removed } });
   await db.query("UPDATE sites SET status = 'excluded', updated_at = now() WHERE id = $1", [id]);
 }
 
@@ -84,22 +113,25 @@ export async function untrackSite(db: Db, id: string) {
  * Drop a project and its visit data from Proposal Pulse without calling Netlify (e.g. the
  * project was deleted). A later webhook for the same project treats it as new.
  */
-export async function forgetSite(db: Db, id: string) {
-  const { rows } = await db.query<{ hosts: string[]; host: string }>("SELECT host, hosts FROM sites WHERE id = $1", [id]);
+export async function forgetSite(db: Db, id: string, via: string) {
+  const { rows } = await db.query<{ name: string; hosts: string[]; host: string; status: string }>("SELECT name, host, hosts, status FROM sites WHERE id = $1", [id]);
+  let visits = 0;
   if (rows[0]) {
     const hosts = [...new Set([rows[0].host, ...(rows[0].hosts || [])].filter(Boolean))];
     await db.query("DELETE FROM alerts WHERE sid IN (SELECT sid FROM sessions WHERE host = ANY($1))", [hosts]);
-    await db.query("DELETE FROM sessions WHERE host = ANY($1)", [hosts]);
+    visits = (await db.query("DELETE FROM sessions WHERE host = ANY($1)", [hosts])).rowCount || 0;
     await db.query("DELETE FROM visitors WHERE host = ANY($1)", [hosts]);
   }
   await db.query("DELETE FROM sites WHERE id = $1", [id]);
+  // Forget doesn't call Netlify: a tracked project keeps its snippet, which the log makes visible.
+  await audit(db, "site_forgotten", { siteId: id, siteName: rows[0]?.name, host: rows[0]?.host, via, detail: { visits, status: rows[0]?.status ?? null } });
 }
 
 /**
  * Delete individual visits (e.g. your own test visits), their alert markers, and any visitor
  * record left with no visits, so return-visit and forward counts stay accurate.
  */
-export async function deleteVisits(db: Db, sids: string[]) {
+export async function deleteVisits(db: Db, sids: string[], via: string) {
   if (!sids.length) return 0;
   const { rows } = await db.query<{ host: string; vid: string }>("SELECT DISTINCT host, vid FROM sessions WHERE sid = ANY($1)", [sids]);
   await db.query("DELETE FROM alerts WHERE sid = ANY($1)", [sids]);
@@ -110,5 +142,20 @@ export async function deleteVisits(db: Db, sids: string[]) {
       [v.host, v.vid],
     );
   }
+  const hosts = [...new Set(rows.map((v) => v.host))];
+  await audit(db, "visits_deleted", { host: hosts.length === 1 ? hosts[0] : null, via, detail: { visits: rowCount || 0, hosts } });
+  return rowCount || 0;
+}
+
+/**
+ * A visitor opted out (t.js `?pp_optout`): delete every visit from that browser to the site.
+ * The log keeps only the site and a count, not the browser ID.
+ */
+export async function forgetVisitor(db: Db, host: string, vid: string) {
+  await db.query("DELETE FROM alerts WHERE sid IN (SELECT sid FROM sessions WHERE host = $1 AND vid = $2)", [host, vid]);
+  const { rowCount } = await db.query("DELETE FROM sessions WHERE host = $1 AND vid = $2", [host, vid]);
+  await db.query("DELETE FROM visitors WHERE host = $1 AND vid = $2", [host, vid]);
+  // logged only when something was deleted, so anonymous requests can't fill the log
+  if (rowCount) await audit(db, "visitor_opted_out", { host, via: "visitor", detail: { visits: rowCount } });
   return rowCount || 0;
 }

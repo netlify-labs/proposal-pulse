@@ -10,6 +10,47 @@ const HOST = /^[a-z0-9.-]{3,253}$/;
 /** Read time that triggers a "deep read" alert. */
 export const DEEP_READ_MS = 120_000;
 
+/**
+ * The browser's privacy signal from request headers: Global Privacy Control (Sec-GPC) or
+ * Do Not Track (DNT). t.js doesn't track these browsers; the server records the page load.
+ */
+export function privacySignal(headers: Headers): "gpc" | "dnt" | "" {
+  if (headers.get("sec-gpc") === "1") return "gpc";
+  if (headers.get("dnt") === "1") return "dnt";
+  return "";
+}
+
+/**
+ * Countries where reading stats wait for the visitor's "Sure": the EU and EEA, the UK (with
+ * Gibraltar and the Crown Dependencies) and Switzerland. Unknown locations are treated the same.
+ */
+const ASK_FIRST = new Set(
+  "AT BE BG HR CY CZ DK EE FI FR DE GR IE IT LV LT LU MT NL PL PT RO SK SI ES SE IS LI NO GB GI GG JE IM CH".split(" "),
+);
+export const asksFirst = (cc: string | undefined) => !cc || ASK_FIRST.has(cc.toUpperCase());
+
+/**
+ * An open-only beacon (see Session.basic) reduced to what such a visit may record: the view
+ * and the first sign of a person, with page, link ID and password page only. Anything else
+ * returns null and is dropped.
+ */
+export function openOnlyEvent(ev: BeaconEvent): BeaconEvent | null {
+  if (ev.k !== "view" && ev.k !== "interact") return null;
+  return { v: ev.v, k: ev.k, h: ev.h, p: ev.p, sid: ev.sid, vid: ev.sid, r: ev.r, gate: ev.gate, o: 1 };
+}
+
+/** Hostname and path of the page that loaded t.js, from the Referer header (often origin only). */
+export function refererPage(referer: string | null): { host: string; path: string } | null {
+  if (!referer) return null;
+  try {
+    const u = new URL(referer);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+    return { host: u.hostname.toLowerCase(), path: u.pathname || "/" };
+  } catch {
+    return null;
+  }
+}
+
 export function isValidEvent(ev: unknown): ev is BeaconEvent {
   const e = ev as BeaconEvent;
   return !!e && typeof e === "object" && ID.test(e.sid) && ID.test(e.vid) && HOST.test(e.h || "");
@@ -44,6 +85,11 @@ export function parseUA(ua: string) {
 
 export type Geo = { city?: string; country?: string; cc?: string; tz?: string; lat?: number; lon?: number };
 
+/** Netlify's `context.geo` (from the visitor's network) in the shape sessions store. */
+export function geoFrom(g: { city?: string; country?: { code?: string; name?: string }; timezone?: string; latitude?: number; longitude?: number } | undefined): Geo {
+  return { city: g?.city, country: g?.country?.name, cc: g?.country?.code, tz: g?.timezone, lat: g?.latitude, lon: g?.longitude };
+}
+
 /** Round a coordinate to 1 decimal (about 10 km), so stored locations stay city-level. */
 const coarse = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.round(n * 10) / 10 : null);
 
@@ -57,7 +103,6 @@ export function newSession(ev: BeaconEvent, ua: string, geo: Geo, now: number): 
     last: now,
     paths: [],
     gate: false,
-    wrongPw: 0,
     unlocked: false,
     human: false,
     engagedMs: 0,
@@ -86,16 +131,36 @@ const clip = (v: unknown, n: number) =>
     .trim()
     .slice(0, n);
 
+/** A link ID from `?r=`, or "" if it looks like an email address. */
+export const linkId = (v: unknown) => {
+  const r = clip(v, 60);
+  return r.includes("@") ? "" : r;
+};
+
+/**
+ * Where a clicked link goes, without query string or fragment (they can carry personal or deal
+ * data). mailto: and tel: links keep only the scheme; anything else is dropped.
+ */
+export function linkTarget(v: unknown): string {
+  const raw = clip(v, 2000);
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    if (u.protocol === "mailto:" || u.protocol === "tel:") return u.protocol;
+    if (u.protocol === "http:" || u.protocol === "https:") return (u.origin + u.pathname).slice(0, 300);
+  } catch {}
+  return "";
+}
+
 /** Fold one beacon into the session. Pure: mutates and returns `s`, no I/O. */
 export function applyEvent(s: Session, ev: BeaconEvent, now: number): Session {
   s.last = now;
-  if (ev.r && !s.r) s.r = clip(ev.r, 60);
+  if (ev.r && !s.r) s.r = linkId(ev.r);
   if (ev.ti && !s.title && !ev.gate) s.title = clip(ev.ti, 120);
   const path = clip(ev.p || "/", 120);
   if (ev.k === "view") {
     if (ev.gate) {
       s.gate = true;
-      if (ev.gate === 2) s.wrongPw++;
     } else {
       s.unlocked = true;
       if (!s.paths.includes(path) && s.paths.length < 30) s.paths.push(path);
@@ -111,8 +176,10 @@ export function applyEvent(s: Session, ev: BeaconEvent, now: number): Session {
   if (typeof ev.ms === "number" && ev.ms > 0) s.engagedMs += Math.min(ev.ms, 30_000);
   if (typeof ev.sc === "number") s.maxScroll = Math.max(s.maxScroll, Math.min(100, Math.round(ev.sc)));
   if (ev.k === "click" && s.clicks.length < 60) {
-    const href = clip(ev.u, 300);
-    s.clicks.push({ t: now, label: clip(ev.l, 80), href: href || undefined });
+    const href = linkTarget(ev.u);
+    // trackers before v2 fell back to the element's visible text, so their labels are dropped
+    const label = (ev.v ?? 0) >= 2 ? clip(ev.l, 80) : "";
+    s.clicks.push({ t: now, label, href: href || undefined });
   }
   if (ev.k === "section") {
     const l = clip(ev.l, 70);

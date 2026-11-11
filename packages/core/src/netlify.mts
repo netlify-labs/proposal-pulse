@@ -119,22 +119,29 @@ export const SNIPPET_TITLE = "Proposal Pulse tracker";
 
 export const snippetHtml = (collectorUrl: string) => `<script async src="${collectorUrl}/t.js"></script>`;
 
+export type SnippetChange = { id?: string; created: boolean; html: string; previousHtml?: string };
+
 /** Add or update the tracker snippet on a project. Live immediately, no redeploy. */
-export async function ensureSnippet(siteId: string, collectorUrl: string): Promise<string | undefined> {
+export async function ensureSnippet(siteId: string, collectorUrl: string): Promise<SnippetChange> {
   const list = await netlifyApi<any[]>(`/sites/${siteId}/snippets`);
   const existing = list.find((x) => x.title === SNIPPET_TITLE);
-  const body = JSON.stringify({ title: SNIPPET_TITLE, general: snippetHtml(collectorUrl), general_position: "footer" });
+  const html = snippetHtml(collectorUrl);
+  const body = JSON.stringify({ title: SNIPPET_TITLE, general: html, general_position: "footer" });
   if (existing) {
     await netlifyApi(`/sites/${siteId}/snippets/${existing.id}`, { method: "PUT", body });
-    return String(existing.id);
+    return { id: String(existing.id), created: false, html, previousHtml: existing.general ?? undefined };
   }
   const created = await netlifyApi<any>(`/sites/${siteId}/snippets`, { method: "POST", body });
-  return created?.id != null ? String(created.id) : undefined;
+  return { id: created?.id != null ? String(created.id) : undefined, created: true, html };
 }
 
-export async function removeSnippet(siteId: string): Promise<void> {
+/** Remove every tracker snippet from a project. Returns what was removed. */
+export async function removeSnippet(siteId: string): Promise<{ id: string; html: string }[]> {
   const list = await netlifyApi<any[]>(`/sites/${siteId}/snippets`);
+  const removed = [];
   for (const x of list.filter((x) => x.title === SNIPPET_TITLE)) {
     await netlifyApi(`/sites/${siteId}/snippets/${x.id}`, { method: "DELETE" });
+    removed.push({ id: String(x.id), html: String(x.general ?? "") });
   }
+  return removed;
 }

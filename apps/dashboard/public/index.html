@@ -234,16 +234,21 @@ function creators(){var c={};(S.data.tracked||[]).forEach(function(t){if(t.creat
 function creatorSelect(id){var cs=creators();if(!cs.length)return '';return '<select class="in" id="'+id+'"><option value="">All creators</option>'+cs.map(function(c){return '<option'+(c===S.creator?' selected':'')+' value="'+esc(c)+'">'+esc(c)+'</option>'}).join('')+'</select>'}
 function bySite(){
   var m={};
-  (S.data.tracked||[]).forEach(function(t){m[t.host]={host:t.host,name:t.name,url:t.url,thumb:t.screenshotUrl||'',creator:t.createdByName||'',tracked:true,sessions:[],vids:{},last:0,engaged:0,maxScroll:0,clicks:0,hot:[],gateOnly:0,wrong:0,recips:{}}});
+  (S.data.tracked||[]).forEach(function(t){m[t.host]={host:t.host,name:t.name,url:t.url,thumb:t.screenshotUrl||'',creator:t.createdByName||'',tracked:true,sessions:[],vids:{},last:0,engaged:0,maxScroll:0,clicks:0,hot:[],gateOnly:0,recips:{}}});
   S.data.sessions.forEach(function(s){
-    var x=m[s.host]||(m[s.host]={host:s.host,name:label(s.host),url:'https://'+s.host,thumb:'',creator:'',tracked:false,sessions:[],vids:{},last:0,engaged:0,maxScroll:0,clicks:0,hot:[],gateOnly:0,wrong:0,recips:{}});
+    var x=m[s.host]||(m[s.host]={host:s.host,name:label(s.host),url:'https://'+s.host,thumb:'',creator:'',tracked:false,sessions:[],vids:{},last:0,engaged:0,maxScroll:0,clicks:0,hot:[],gateOnly:0,recips:{}});
     x.sessions.push(s);
-    if(s.unlocked&&s.human){x.vids[s.vid]=1;x.last=Math.max(x.last,s.last);x.engaged+=s.engagedMs;x.maxScroll=Math.max(x.maxScroll,s.maxScroll);x.clicks+=clicksOf(s);if(s.r)x.recips[s.r]=1;var w=hotWhy(s);if(w.length)x.hot.push((s.r||'someone')+' '+w.join(' and '))}
+    if(s.unlocked&&s.human){x.vids[s.basic?'o:'+openKey(s):s.vid]=1;x.last=Math.max(x.last,s.last);x.engaged+=s.engagedMs;x.maxScroll=Math.max(x.maxScroll,s.maxScroll);x.clicks+=clicksOf(s);if(s.r)x.recips[s.r]=1;var w=hotWhy(s);if(w.length)x.hot.push((s.r||'someone')+' '+w.join(' and '))}
+    else if(s.signal){x.last=Math.max(x.last,s.last)}
     else if(s.gate&&!s.unlocked){x.gateOnly++}
-    x.wrong+=s.wrongPw||0;
   });
-  return Object.keys(m).map(function(k){var x=m[k];x.people=Object.keys(x.vids).length;x.visits=x.sessions.filter(function(s){return s.unlocked&&s.human}).length;x.score=heat(x);return x});
+  return Object.keys(m).map(function(k){var x=m[k];x.people=Object.keys(x.vids).length;x.visits=x.sessions.filter(function(s){return (s.unlocked&&s.human)||s.signal}).length;x.score=heat(x);return x});
 }
+// Open-only visits (EU/UK/CH, no reading stats) carry no browser ID. Opens with the same link,
+// place and device are probably one person; this is only how they're grouped on screen.
+function openKey(s){return [s.r,s.city,s.cc,s.device,s.browser,s.os].join('|')}
+function openDevice(s){return s.browser?(s.device&&s.device!=='Desktop'?s.device+' · ':'')+s.browser+'/'+s.os:''}
+function openGroups(list){var g={};list.forEach(function(s){var k=openKey(s),x=g[k]||(g[k]={s:s,n:0,last:0});x.n++;x.last=Math.max(x.last,s.last)});return Object.keys(g).map(function(k){return g[k]}).sort(function(a,b){return b.n-a.n||b.last-a.last})}
 function heat(x){if(!x.visits)return 0;var sc=Math.min(40,x.engaged/1000/60*8)+Math.min(20,x.maxScroll/5)+Math.min(10,x.clicks*2)+Math.min(20,x.hot.length*10)+Math.min(20,(x.people-1)*10)+Math.min(10,(x.visits-1)*4);var rec=(Date.now()-x.last)/86400000;if(rec>14)sc*=.5;return Math.round(Math.min(100,sc))}
 function heatColor(v){return v>=60?'var(--pink)':v>=30?'var(--amber)':v>0?'var(--teal)':'var(--line)'}
 
@@ -283,8 +288,8 @@ function load(manual){
 function kpis(){
   var sites=bySite(),now=Date.now();
   var opened=sites.filter(function(x){return x.visits>0});
-  var live=S.data.sessions.filter(function(s){return s.unlocked&&now-s.last<75000});
-  var human=S.data.sessions.filter(function(s){return s.unlocked&&s.human});
+  var live=S.data.sessions.filter(function(s){return s.unlocked&&!s.signal&&!s.basic&&now-s.last<75000});
+  var human=S.data.sessions.filter(function(s){return s.unlocked&&s.human&&!s.basic});
   var avg=human.length?human.reduce(function(a,s){return a+s.engagedMs},0)/human.length:0;
   $('kpis').innerHTML='<div class="kpis">'+
    k('Tracked',(S.data.tracked||[]).length,'proposal sites')+
@@ -304,26 +309,27 @@ function body(){
 
 function sessionCard(s,withSite){
   // Layout B: thumbnail · title + creator · coloured status + badges · facts on one line
-  var now=Date.now(),isLive=s.unlocked&&now-s.last<75000;
+  var now=Date.now(),isLive=s.unlocked&&!s.signal&&!s.basic&&now-s.last<75000;
   var cls='open',title='👀 Opened';
-  if(!s.unlocked){cls='gate';title='🔒 '+(s.wrongPw?'Tried the password':'Reached the password page')}
+  if(!s.unlocked){cls='gate';title='🔒 Reached the password page'}
+  else if(s.signal){title='👀 Loaded the page · no reading data (browser sends '+(s.signal==='gpc'?'Global Privacy Control':'Do Not Track')+')'}
+  else if(s.basic&&s.human){title='👀 Opened · no reading stats (not shared)'}
   else if(!s.human){cls='brief';title='Brief visit, no interaction'}
   else if(s.engagedMs>=120000){title='📖 Deep read'}
   var why=hotWhy(s);if(why.length){cls='hot';title='🔥 '+why[0].charAt(0).toUpperCase()+why.join(' and ').slice(1)}
   var badges=[];
   if(isLive)badges.push('<span class="badge live">LIVE</span>');
   if(s.alerts&&s.alerts.indexOf('open')>-1){if(s.newVisitor&&s.visitorCount>1)badges.push('<span class="badge amber">new person · '+s.visitorCount+' total</span>');else if(s.visitNo>1)badges.push('<span class="badge teal">visit #'+s.visitNo+'</span>')}
-  if(s.wrongPw)badges.push('<span class="badge pink">wrong password ×'+s.wrongPw+'</span>');
   var facts=[];
-  if(s.unlocked&&s.human){var n=clicksOf(s);facts.push(dur(s.engagedMs)+' read',(s.maxScroll||0)+'% scrolled',n+' click'+(n===1?'':'s'));if(s.paths&&s.paths.length>1)facts.push(s.paths.length+' pages')}
-  facts.push(s.r?'<span class="who pv">'+esc(s.r)+'</span>':'Unknown recipient',esc([s.city,s.cc].filter(Boolean).join(', ')||'Unknown location'),esc((s.device&&s.device!=='Desktop'?s.device+' · ':'')+s.browser+'/'+s.os));
+  if(s.unlocked&&s.human&&!s.basic){var n=clicksOf(s);facts.push(dur(s.engagedMs)+' read',(s.maxScroll||0)+'% scrolled',n+' click'+(n===1?'':'s'));if(s.paths&&s.paths.length>1)facts.push(s.paths.length+' pages')}
+  facts.push(s.r?'<span class="who pv" title="Link ID">🔗 '+esc(s.r)+'</span>':'Shared link',esc([s.city,s.cc].filter(Boolean).join(', ')||'Unknown location'),esc(openDevice(s)));
   if(s.ref)facts.push('via '+esc(s.ref));
   var t=withSite?trackedByHost()[s.host]:null,thumb=t&&t.screenshotUrl,url=(t&&t.url)||('https://'+s.host),by=withSite?creatorOf(s.host):'';
   var h='<div class="item'+(withSite?'':' nothumb')+(cls==='brief'?' dim':'')+'">'+
     (withSite?'<a class="tlink" href="'+esc(url)+'" target="_blank" rel="noopener" title="'+tip('Open '+label(s.host))+'">'+(thumb?'<img class="thumb" loading="lazy" alt="" src="'+esc(thumb)+'">':'<span class="thumb"></span>')+'</a>':'')+
     '<div>'+(withSite?'<div class="t1"><a class="site" href="#site='+encodeURIComponent(s.host)+'">'+pv(label(s.host))+'</a>'+(by?'<span class="by">by '+esc(by)+'</span>':'')+'</div>':'')+
     '<div class="st '+cls+'">'+esc(title)+badges.join(' ')+'</div>'+
-    '<div class="t2">'+facts.join(' · ')+'</div>';
+    '<div class="t2">'+facts.filter(Boolean).join(' · ')+'</div>';
   if(s.unlocked&&((s.sections&&s.sections.length)||(s.clicks&&s.clicks.length))){
     h+='<details class="more"><summary>Sections read &amp; clicks ›</summary>';
     if(s.sections&&s.sections.length)h+='<div class="t3"><b>Read:</b> '+s.sections.map(esc).join(' → ')+'</div>';
@@ -336,7 +342,7 @@ function sessionCard(s,withSite){
 function activity(b){
   var list=S.data.sessions.filter(function(s){return s.unlocked||s.gate});
   var vis=list; // every visit, including brief ones (no interaction)
-  b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="aq" placeholder="Filter by site or recipient" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+creatorSelect('acr')+
+  b.innerHTML='<div class="panel"><div class="toolbar"><input type="search" id="aq" placeholder="Filter by site or link ID" value="'+esc(S.q)+'" style="flex:1;min-width:160px">'+creatorSelect('acr')+
   '<span id="aloc"></span></div><div id="amap" style="padding:16px 14px 0"></div><div class="feed" id="feed"></div></div>';
   function draw(){var q=S.q.toLowerCase();var all=vis.filter(function(s){return (!q||s.host.indexOf(q)>-1||(s.r||'').toLowerCase().indexOf(q)>-1)&&(!S.creator||creatorOf(s.host)===S.creator)});
     // the map keeps every dot so you can switch places; the feed narrows to the picked one
@@ -375,34 +381,37 @@ function drawer(host){
   var secCount={};x.sessions.forEach(function(s){(s.sections||[]).forEach(function(l){secCount[l]=(secCount[l]||0)+1})});
   var secs=Object.keys(secCount).sort(function(a,b){return secCount[b]-secCount[a]}),top=secs.length?secCount[secs[0]]:1;
   var hot=(x.hot||[]).length;
+  var opens=openGroups(x.sessions.filter(function(s){return s.basic&&s.unlocked&&s.human}));
   d.innerHTML='<div class="hd">'+(x.thumb?'<img class="thumb" alt="" src="'+esc(x.thumb)+'">':'')+'<div style="flex:1;min-width:0"><h3>'+pv(label(host))+'</h3>'+(x.creator?'<div class="sub">by '+esc(x.creator)+'</div>':'')+'</div><a class="hbtn" href="'+esc(x.url||('https://'+host))+'" target="_blank" rel="noopener">Open site ↗</a><button class="hbtn" id="dx" aria-label="Close">✕</button></div><div class="bd">'+
   visitMap(x.sessions.filter(function(s){return s.unlocked||s.gate}),{aspect:2.6,px:600})+
   '<div class="dstats"><span><b>'+x.people+'</b> '+(x.people===1?'person':'people')+'</span><span><b>'+x.visits+'</b> visit'+(x.visits===1?'':'s')+'</span><span><b>'+dur(x.engaged)+'</b> read</span><span><b>'+x.clicks+'</b> click'+(x.clicks===1?'':'s')+'</span>'+(hot?'<span title="'+tip(x.hot.join(' · '))+'"><b>🔥 '+hot+'</b> hot</span>':'')+'</div>'+
+  (opens.length?'<div class="section-title">Opened without reading stats</div><div class="panel" style="padding:8px 12px">'+opens.map(function(o){var s=o.s;return '<div class="secrow"><span>'+[s.r?'🔗 '+pv(s.r):'Shared link',esc([s.city,s.cc].filter(Boolean).join(', ')||'Unknown location'),esc(openDevice(s))].filter(Boolean).join(' · ')+'</span><span class="mono hint">'+o.n+'× · '+ago(o.last)+'</span></div>'}).join('')+'<p class="hint" style="margin:6px 0 2px">EU, UK and Swiss visitors who haven\'t shared reading stats. Opens with the same link, place and device are grouped as probably one person.</p></div>':'')+
   (secs.length?'<div class="section-title">Most-read sections</div><div class="panel" style="padding:8px 12px">'+secs.slice(0,8).map(function(l){return '<div class="secrow"><span>'+esc(l)+'</span><span class="mono hint">'+secCount[l]+'×</span><i style="width:'+Math.round(secCount[l]/top*100)+'%"></i></div>'}).join('')+'</div>':'')+
   '<div class="section-title">Visit timeline</div><div class="panel feed">'+(x.sessions.length?x.sessions.slice().sort(function(a,b){return b.last-a.last}).map(function(s){return sessionCard(s,false)}).join(''):'<div class="empty">No visits yet.</div>')+'</div>'+
-  '<div class="section-title">Personal link</div><div class="panel" style="padding:12px">'+linkForm(host)+'</div></div>';
+  '<div class="section-title">Unique link</div><div class="panel" style="padding:12px">'+linkForm(host)+'</div></div>';
   $('dx').onclick=function(){closeDrawer()};
   bindLinkForm();
   d.classList.add('on');$('dbg').classList.add('on');d.setAttribute('aria-hidden','false');d.scrollTop=0;
 }
-function slug(s){return s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'').slice(0,60)}
+function linkToken(){var a='abcdefghijkmnpqrstuvwxyz23456789',b=new Uint8Array(8),t='';crypto.getRandomValues(b);for(var i=0;i<b.length;i++)t+=a[b[i]%a.length];return t}
 function linkForm(host){
   var opts=(S.data.tracked||[]).map(function(t){return t.host}).concat(host?[host]:[]).filter(function(v,i,a){return v&&a.indexOf(v)===i}).sort();
-  return '<div style="display:flex;gap:8px;flex-wrap:wrap"><select class="in" id="lsite" style="flex:1;min-width:200px">'+(opts.length?opts.map(function(h){return '<option'+(h===host?' selected':'')+' value="'+esc(h)+'">'+esc(label(h))+'</option>'}).join(''):'<option value="">No tracked sites yet</option>')+'</select><input type="text" id="lwho" placeholder="Recipient, e.g. Jane Smith CTO" style="flex:1;min-width:200px"></div><div class="link-out"><input type="text" id="lout" readonly class="mono" placeholder="Personal link appears here"><button class="btn" id="lcopy">Copy</button></div><p class="hint" style="margin:10px 0 0">Send each person their own link so alerts say who opened it. The site password stays the same, and the name is never shown on the page.</p>';
+  return '<div style="display:flex;gap:8px;flex-wrap:wrap"><select class="in" id="lsite" style="flex:1;min-width:200px">'+(opts.length?opts.map(function(h){return '<option'+(h===host?' selected':'')+' value="'+esc(h)+'">'+esc(label(h))+'</option>'}).join(''):'<option value="">No tracked sites yet</option>')+'</select><button class="btn ghost" id="lnew">New link</button></div><div class="link-out"><input type="text" id="lout" readonly class="mono" placeholder="Unique link appears here"><button class="btn" id="lcopy">Copy</button></div><p class="hint" style="margin:10px 0 0">Make a new link for each person you send it to, so you can tell their visits and forwards apart. Each link gets a random ID, so names and emails never end up in URLs, the dashboard or Slack. The site password stays the same.</p>';
 }
 function bindLinkForm(){
-  function upd(){var h=$('lsite').value,w=slug($('lwho').value);$('lout').value=h?('https://'+h+'/'+(w?'?r='+w:'')):''}
-  $('lsite').onchange=upd;$('lwho').oninput=upd;upd();
+  var tok=linkToken();
+  function upd(){var h=$('lsite').value;$('lout').value=h?('https://'+h+'/?r='+tok):''}
+  $('lsite').onchange=function(){tok=linkToken();upd()};$('lnew').onclick=function(){tok=linkToken();upd();toast('New link ready')};upd();
   $('lcopy').onclick=function(){var v=$('lout').value;if(!v)return;(navigator.clipboard?navigator.clipboard.writeText(v):Promise.reject()).then(function(){toast('Link copied')}).catch(function(){$('lout').select();document.execCommand('copy');toast('Link copied')})};
 }
 function links(b){
-  b.innerHTML='<div class="panel" style="padding:18px"><h3 style="margin:0 0 4px">Personal links</h3><p class="hint" style="margin:0 0 14px">Add <span class="mono">?r=name</span> to a proposal link and every alert and visit will be labelled with that person, so you can tell forwards apart.</p>'+linkForm('')+'</div>';
+  b.innerHTML='<div class="panel" style="padding:18px"><h3 style="margin:0 0 4px">Unique links</h3><p class="hint" style="margin:0 0 14px">Generate a unique URL for each send. Visits from that link are labelled with its random ID, so you can tell people and forwards apart without putting a name in the URL.</p>'+linkForm('')+'</div>';
   bindLinkForm();
 }
 
 // ---------- setup ----------
 function setup(b){
-  b.innerHTML='<div class="setup-grid"><div class="panel" id="st"><div class="empty">Checking setup…</div></div><div class="panel" style="padding:16px"><h3 style="margin:0 0 6px">How it works</h3><ol class="hint" style="margin:0;padding-left:18px;line-height:1.7"><li>Netlify organization webhooks tell the collector when a project is created or published. Projects in your configured teams get a ~3 KB tracker through Netlify Snippet Injection, live instantly with no redeploy.</li><li>Existing projects pick up the tracker on their next production deploy, or right away with Track.</li><li>The tracker records opens, password-page hits, read time, scroll depth, sections read and clicks. It sets no cookies and stores no IP addresses.</li><li>Optional Slack alerts from the collector: first open, return visit, new person (possible forward) and 2+ minute read.</li><li>Untrack a project to remove the tracker. It stays untracked on later deploys.</li></ol></div></div>'+
+  b.innerHTML='<div class="setup-grid"><div class="panel" id="st"><div class="empty">Checking setup…</div></div><div class="panel" style="padding:16px"><h3 style="margin:0 0 6px">How it works</h3><ol class="hint" style="margin:0;padding-left:18px;line-height:1.7"><li>Netlify organization webhooks tell the collector when a project is created or published. Projects in your configured teams get a ~3 KB tracker through Netlify Snippet Injection, live instantly with no redeploy.</li><li>Existing projects pick up the tracker on their next production deploy, or right away with Track.</li><li>The tracker records opens, password-page hits, read time, scroll depth, sections read and which links were clicked (no query strings, no button text). It sets no cookies and stores no IP addresses. For browsers that send Global Privacy Control or Do Not Track the tracker does not run; the collector records the page load from the script request instead (page, time and country only).</li><li>A small pill in the lower-right corner tells visitors ("Reading stats on · Turn off"). In the EU, UK and Switzerland it asks instead ("Share reading stats? Sure / No"), and until someone taps Sure only the open, place and device are recorded, with nothing stored in their browser.</li><li>Optional Slack alerts from the collector: first open, return visit, new person (possible forward) and 2+ minute read.</li><li>Untrack a project to remove the tracker. It stays untracked on later deploys. Every snippet change and visit deletion is written to the audit log.</li></ol></div></div>'+
   '<div class="panel" id="hookp" style="margin-bottom:16px"><div class="empty">Checking org webhook…</div></div>'+
   '<div class="panel"><div class="toolbar"><b style="margin-right:auto">Projects</b><select class="in" id="sf"><option value="tracked">Tracked</option><option value="excluded">Untracked</option><option value="all">All</option></select><input type="search" id="sq" placeholder="Search" value="'+esc(S.siteQ)+'"><button class="btn ghost" id="sall">Select shown</button><input type="text" id="tref" placeholder="Project name or URL" class="mono" style="width:200px"><button class="btn" id="strackone">Track</button><button class="btn" id="stracksel" disabled style="display:none">Track selected</button><button class="btn danger" id="suntrack" disabled>Untrack</button><button class="btn ghost" id="sforget" disabled title="Remove from Proposal Pulse without calling Netlify, e.g. for deleted projects">Forget</button></div><div class="sites-list" id="sl"><div class="empty">Loading projects…</div></div></div>';
   $('sf').value=S.siteFilter;

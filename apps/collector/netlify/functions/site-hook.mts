@@ -73,8 +73,8 @@ async function handle(hook: { siteId: string; name: string; team: string }, even
     const site = await getSite(hook.siteId);
     // renamed into PULSE_EXCLUDE: take the tracker back out and drop its data
     if (isExcludedName(site.name)) {
-      await untrackSite(db, site.id);
-      await forgetSite(db, site.id);
+      await untrackSite(db, site.id, "webhook");
+      await forgetSite(db, site.id, "webhook");
       return ["untracked", `${site.name} matches PULSE_EXCLUDE`];
     }
     // keep the thumbnail, creator, name and domains current; the snippet is already there
