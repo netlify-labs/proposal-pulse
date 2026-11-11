@@ -6,6 +6,7 @@ import {
   forgetVisitor,
   geoFrom,
   isValidEvent,
+  openOnlyEvent,
   postSlack,
   privacySignal,
   trackedSiteForHost,
@@ -15,7 +16,7 @@ import {
   type Session,
 } from "../../../../packages/core/src/index.mts";
 import { db, pool } from "../../lib/db.mts";
-import { claimAlert, recordBeacon, type Pool } from "../../lib/visits.mts";
+import { claimAlert, recordBeacon, recordConsent, type Pool } from "../../lib/visits.mts";
 
 /** Beacon endpoint for t.js. Public, cookieless, accepts events only for tracked projects. */
 
@@ -59,6 +60,20 @@ export default async (req: Request, context: Context) => {
   if (privacySignal(req.headers)) return done();
 
   const geo = geoFrom(context.geo);
+  if (ev.k === "consent") {
+    try {
+      await recordConsent(db, site.host, ev.sid, ev.vid, geo.cc || "", Date.now());
+    } catch (e) {
+      console.error("consent failed", e);
+      return done(500);
+    }
+    return done();
+  }
+  if (ev.o) {
+    const open = openOnlyEvent(ev);
+    if (!open) return done();
+    ev = open;
+  }
   try {
     const { session, pending } = await recordBeacon(pool as unknown as Pool, ev, ua, geo, Date.now());
     if (pending.length) context.waitUntil(sendAlerts(session, pending, site).catch((e) => console.error("alert failed", e)));

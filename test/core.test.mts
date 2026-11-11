@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   applyEvent,
+  asksFirst,
   isValidEvent,
   newAlerts,
   newSession,
@@ -156,6 +157,13 @@ describe("collect less", () => {
     const s = newSession(ev("view"), "", {}, 0);
     applyEvent(s, ev("view", { r: "jane@acme.com" }), 0);
     expect(s.r).toBe("");
+  });
+});
+
+describe("EU/UK/CH: reading stats wait for a Sure", () => {
+  test("EU, EEA, UK and Switzerland ask first, and so does an unknown location", () => {
+    for (const cc of ["DE", "fr", "IE", "NO", "IS", "GB", "CH", "JE", "", undefined]) expect(asksFirst(cc)).toBe(true);
+    for (const cc of ["US", "CA", "IN", "AU", "BR"]) expect(asksFirst(cc)).toBe(false);
   });
 });
 

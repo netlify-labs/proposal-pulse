@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import {
   applyEvent,
+  audit,
   newAlerts,
   newSession,
   type AlertType,
@@ -25,6 +26,7 @@ export async function recordBeacon(pool: Pool, ev: BeaconEvent, ua: string, geo:
   try {
     await client.query("BEGIN");
     const fresh = newSession(ev, ua, geo, now);
+    if (ev.o) fresh.basic = true;
     await client.query(
       `INSERT INTO sessions (sid, vid, host, started_at, last_at, data)
        VALUES ($1, $2, $3, to_timestamp($4 / 1000.0), to_timestamp($4 / 1000.0), $5)
@@ -33,9 +35,15 @@ export async function recordBeacon(pool: Pool, ev: BeaconEvent, ua: string, geo:
     );
     const { rows } = await client.query<{ data: Session }>("SELECT data FROM sessions WHERE sid = $1 FOR UPDATE", [ev.sid]);
     const s = rows[0].data;
+    // an open-only visit takes only open-only beacons until the visitor's "Sure" (recordConsent)
+    // makes it a normal one; a stray open-only beacon after that is ignored too
+    if (!!s.basic !== !!ev.o) {
+      await client.query("COMMIT");
+      return { session: s, pending: [] as AlertType[] };
+    }
     applyEvent(s, ev, now);
     const pending: AlertType[] = newAlerts(s, ev);
-    if (pending.includes("open")) await addVisitorContext(client, s);
+    if (pending.includes("open") && !s.basic) await addVisitorContext(client, s);
     await client.query("UPDATE sessions SET last_at = to_timestamp($2 / 1000.0), data = $3 WHERE sid = $1", [s.sid, s.last, JSON.stringify(s)]);
     await client.query("COMMIT");
     return { session: s, pending };
@@ -85,6 +93,28 @@ export async function recordServerVisit(db: Db, page: { host: string; path: stri
     [s.sid, s.vid, s.host, now, JSON.stringify(s)],
   );
   return s;
+}
+
+/**
+ * An EU/UK/CH visitor tapped "Sure": the open-only visit `sid` becomes a normal visit for
+ * browser `vid`, the browser is counted as a visitor, and the consent goes in the audit log as
+ * the record of it. Does nothing (and logs nothing) unless `sid` is an open-only visit to `host`.
+ */
+export async function recordConsent(db: Db, host: string, sid: string, vid: string, cc: string, now: number) {
+  const { rows } = await db.query<{ data: Session }>(
+    `UPDATE sessions SET vid = $3, data = (data - 'basic') || jsonb_build_object('vid', $3::text)
+     WHERE sid = $1 AND host = $2 AND data->>'basic' = 'true'
+     RETURNING data`,
+    [sid, host, vid],
+  );
+  if (!rows.length) return false;
+  await db.query(
+    `INSERT INTO visitors (host, vid, first_at, visits, recipient) VALUES ($1, $2, to_timestamp($3 / 1000.0), 1, NULLIF($4, ''))
+     ON CONFLICT (host, vid) DO NOTHING`,
+    [host, vid, now, rows[0].data.r || ""],
+  );
+  await audit(db, "consent_given", { host, via: "visitor", detail: { sid, vid, cc: cc || null, asked: "Share reading stats?" } });
+  return true;
 }
 
 /** True the first time an alert is claimed for a visit; the primary key makes it atomic. */

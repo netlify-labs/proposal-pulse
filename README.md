@@ -67,15 +67,20 @@ flowchart LR
 
 The tracker sets no cookies and the collector stores no IP addresses. It keeps a random browser ID in `localStorage`, replaced after 180 days to match visit retention, and a tab session ID in `sessionStorage`.
 
+A small pill in the lower-right corner tells visitors about it (it moves up if the page has its own controls in that corner):
+
+- **Most of the world:** "Reading stats on · Turn off". **Turn off** stops tracking in that browser for that site and deletes the visits already recorded from it. ✕ hides the pill for that site.
+- **EU/EEA, UK and Switzerland** (by the visitor's location; unknown locations count too): "Share reading stats? Sure / No", with a **?** that says what reading stats are. Until the visitor taps **Sure**, only the open is recorded: page, time, link ID, location and device, with no browser or tab ID stored and nothing else sent. **Sure** turns the visit into a normal one and is written to the audit log as the record of consent. **No** is remembered and the pill doesn't come back. On the dashboard these opens show as "no reading stats", grouped by link, place and device as probably one person.
+
 What it records, and what it leaves out:
 
 - **Clicks:** where a link goes, as origin and path only (no query string or fragment). `mailto:` and `tel:` links record only that kind of link, not the address or number. Button and link text is never recorded; a click has a label only if the page sets `data-track` or `aria-label` on the element.
 - **Referrer:** the referring site's hostname only.
 - **Password page:** whether a visit saw the Netlify password page. Attempts are not counted, and nothing typed is read.
 - **Link IDs:** the `?r=` value from a unique link. Values that look like an email address are dropped.
-- **Opt-out:** opening any tracked page with `?pp_optout` (for example `https://proposal.example.com/?pp_optout`) stops tracking in that browser for that site and deletes the visits already recorded from it. Nothing is shown on the page, so link to it from your privacy notice.
+- **Opt-out:** besides the pill's **Turn off**, opening any tracked page with `?pp_optout` (for example `https://proposal.example.com/?pp_optout`) does the same, for a link in a privacy notice.
 
-Location (city, country, timezone, and coordinates rounded to about 10 km for the maps) comes from Netlify's edge geolocation, which is based on the visitor's network, so VPNs and corporate proxies can place people in the wrong city. Visits older than `RETENTION_DAYS` (default 180) are deleted daily. Check whether your consent requirements apply to this kind of analytics before you track projects shared with people in regulated regions.
+Location (city, country, timezone, and coordinates rounded to about 10 km for the maps) comes from Netlify's edge geolocation, which is based on the visitor's network, so VPNs and corporate proxies can place people in the wrong city. Visits older than `RETENTION_DAYS` (default 180) are deleted daily.
 
 ## Requirements
 
@@ -368,7 +373,7 @@ Netlify Functions read environment variables at deploy time: redeploy a project 
 - **Remove your own or test visits:** click **Delete** under the time on any visit in Activity or a proposal's slide-out. The visit, its alert markers and any visitor record left with no visits are removed.
 - **A tracked project was deleted:** select it and click **Forget**. Its visit data is removed too.
 - **Pause Slack alerts:** set `SLACK_ALERTS=off` on the collector and redeploy. Alerts that would have fired meanwhile are marked as sent, so resuming does not flood the channel.
-- **Audit log:** every snippet Proposal Pulse adds, updates or removes on a live project (Snippet Injection changes a site with no deploy to show for it), every **Forget**, every visit deletion and every visitor opt-out is written to the `audit_log` table with the time, the project, where it came from (`webhook`, `dashboard` or `visitor`) and, for snippet changes, the snippet HTML. The retention job never deletes from it. Query it with `SELECT * FROM audit_log ORDER BY at DESC`. Dashboard actions are recorded as `dashboard`, not by person.
+- **Audit log:** every snippet Proposal Pulse adds, updates or removes on a live project (Snippet Injection changes a site with no deploy to show for it), every **Forget**, every visit deletion, every visitor opt-out and every EU/UK/CH "Sure" is written to the `audit_log` table with the time, the project, where it came from (`webhook`, `dashboard` or `visitor`) and, for snippet changes, the snippet HTML. The retention job never deletes from it. Query it with `SELECT * FROM audit_log ORDER BY at DESC`. Dashboard actions are recorded as `dashboard`, not by person.
 - **Webhook health:** **Setup > Org webhook** shows the last delivery and per-outcome counts for 24 hours. Every org event is logged, including other teams' (`ignored`).
 - **Rotate the database credentials:** repeat step 7 and redeploy the dashboard.
 - **Keep `HOOK_SECRET` unchanged.** The org webhooks sign every delivery with it. If you change it on the projects, an Organization Owner must run step 10 again with the new value, or the collector rejects every delivery as a bad signature.

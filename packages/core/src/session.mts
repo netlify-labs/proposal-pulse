@@ -20,6 +20,25 @@ export function privacySignal(headers: Headers): "gpc" | "dnt" | "" {
   return "";
 }
 
+/**
+ * Countries where reading stats wait for the visitor's "Sure": the EU and EEA, the UK (with
+ * Gibraltar and the Crown Dependencies) and Switzerland. Unknown locations are treated the same.
+ */
+const ASK_FIRST = new Set(
+  "AT BE BG HR CY CZ DK EE FI FR DE GR IE IT LV LT LU MT NL PL PT RO SK SI ES SE IS LI NO GB GI GG JE IM CH".split(" "),
+);
+export const asksFirst = (cc: string | undefined) => !cc || ASK_FIRST.has(cc.toUpperCase());
+
+/**
+ * An open-only beacon (see Session.basic) reduced to what such a visit may record: the view
+ * and the first sign of a person, with page, link ID and password page only. Anything else
+ * returns null and is dropped.
+ */
+export function openOnlyEvent(ev: BeaconEvent): BeaconEvent | null {
+  if (ev.k !== "view" && ev.k !== "interact") return null;
+  return { v: ev.v, k: ev.k, h: ev.h, p: ev.p, sid: ev.sid, vid: ev.sid, r: ev.r, gate: ev.gate, o: 1 };
+}
+
 /** Hostname and path of the page that loaded t.js, from the Referer header (often origin only). */
 export function refererPage(referer: string | null): { host: string; path: string } | null {
   if (!referer) return null;

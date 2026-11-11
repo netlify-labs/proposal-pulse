@@ -3,7 +3,7 @@ import type { Db, SiteRecord, SiteStatus } from "./types.mts";
 
 /** Shared reads and writes on the `sites` table, used by both apps. */
 
-export type AuditAction = "snippet_added" | "snippet_updated" | "snippet_removed" | "site_forgotten" | "visits_deleted" | "visitor_opted_out";
+export type AuditAction = "snippet_added" | "snippet_updated" | "snippet_removed" | "site_forgotten" | "visits_deleted" | "visitor_opted_out" | "consent_given";
 
 /**
  * Append to the audit log: every change Proposal Pulse makes to a live project (Snippet

@@ -1,5 +1,5 @@
 import type { Config, Context } from "@netlify/functions";
-import { BOT_UA, geoFrom, privacySignal, refererPage, trackedSiteForHost } from "../../../../packages/core/src/index.mts";
+import { asksFirst, BOT_UA, geoFrom, privacySignal, refererPage, trackedSiteForHost } from "../../../../packages/core/src/index.mts";
 import { db } from "../../lib/db.mts";
 import { recordServerVisit } from "../../lib/visits.mts";
 
@@ -10,6 +10,9 @@ import { recordServerVisit } from "../../lib/visits.mts";
  * only the load is recorded here: the page from the Referer header, the time, and the country
  * from context.geo (the user agent is read only to skip bots). Other browsers are left to t.js,
  * so no visit is recorded twice.
+ *
+ * Visitors in the EU/UK/CH (or with no known location) get the script with EU = 1, so reading
+ * stats wait for their "Sure" (see tracker.js). The browser may cache that copy, never the CDN.
  */
 
 let source: { at: number; body: string } | undefined;
@@ -42,6 +45,7 @@ export default async (req: Request, context: Context) => {
     console.error("tracker source failed", e);
     return new Response("/* Proposal Pulse tracker unavailable */", { status: 503, headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" } });
   }
+  if (asksFirst(context.geo?.country?.code)) body = body.replace("/*@eu*/ 0", "/*@eu*/ 1");
   return new Response(body, {
     headers: {
       "content-type": "text/javascript; charset=utf-8",

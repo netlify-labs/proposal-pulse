@@ -52,6 +52,13 @@ export type Session = {
    * page. Each load is its own visit.
    */
   signal?: "gpc" | "dnt";
+  /**
+   * Open only: an EU/UK/CH visit before the visitor agreed to reading stats. Page, time, link
+   * ID, location and device; no read time, scroll, sections, clicks or title. `vid` is random
+   * per page load, so it never counts as a person or a return visit. Cleared when the visitor
+   * taps "Sure" and the visit continues as a normal one.
+   */
+  basic?: boolean;
 };
 
 export type AlertType = "open" | "hot" | "deep";
@@ -60,8 +67,13 @@ export type AlertType = "open" | "hot" | "deep";
 export type BeaconEvent = {
   /** Tracker version. 2+ sends click labels only from data-track/aria-label. */
   v?: number;
-  /** `optout` asks to delete this browser's visits to the site (see t.js `?pp_optout`). */
-  k: "view" | "hb" | "click" | "section" | "leave" | "interact" | "optout";
+  /**
+   * `optout` asks to delete this browser's visits to the site (see t.js `?pp_optout`).
+   * `consent` is an EU/UK/CH "Sure" to reading stats for the open-only visit `sid`.
+   */
+  k: "view" | "hb" | "click" | "section" | "leave" | "interact" | "optout" | "consent";
+  /** 1 while the visit is open only (see Session.basic). */
+  o?: 1;
   /** hostname */
   h: string;
   /** path */
